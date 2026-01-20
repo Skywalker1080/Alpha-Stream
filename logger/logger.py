@@ -29,8 +29,14 @@ console_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
 logger.addHandler(console_handler)
 
+"""
 #log messages
 logger.info("This is an info message")
 logger.warning("This is a warning message")
 logger.error("This is an error message")
 logger.critical("This is a critical message")
+"""
+
+def get_logger():
+    """Return the configured logger."""
+    return logger
