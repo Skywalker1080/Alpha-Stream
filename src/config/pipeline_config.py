@@ -8,7 +8,7 @@ class Config:
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
     context_len: int = 60
     pred_len: int = 5 # forecast step
-    features: List[str] = field(default_factory=lambda: ["Open", "High", "Low", "Close", "Volume"])
+    features: List[str] = field(default_factory=lambda: ["Open", "High", "Low", "Close", "Volume", "RSI", "MACD"])
     
 
 @dataclass
