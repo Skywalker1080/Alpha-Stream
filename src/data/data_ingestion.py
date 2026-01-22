@@ -8,7 +8,7 @@ from typing import Optional
 from src.exception.exceptions import PrismException
 from logger.logger import get_logger
 from src.config.pipeline_config import IndicatorConfig, Config
-import datetime
+from datetime import datetime
 from pathlib import Path
 import os
 import subprocess
@@ -70,14 +70,19 @@ def fetch_ohlcv(ticker:str, start: str, end: Optional[str] = None) -> pd.DataFra
 
         logger.debug(f"fetched {len(df)} rows for {ticker}")
         logger.info(f"INGESTION: data ingestion complete")
-
+        #=======================================
         # Feast Integration
+        #=======================================
         try:
+            logger.info("FEAST: starting feast integration")
             # preparing data for feast
             feast_df = df.copy() # safe way to do it
             feast_df['ticker'] = ticker
             feast_df['event_timestamp'] = pd.to_datetime(feast_df['date'])
-            feast_df['created_timestamp'] = datetime.datetime.now()
+            feast_df['created_timestamp'] = datetime.now()
+
+            #print(df.info())
+            #print(feast_df.info())
 
             # define feature store
             repo_path = Path(__file__).parent.parent.parent / "feature_store"
@@ -85,51 +90,78 @@ def fetch_ohlcv(ticker:str, start: str, end: Optional[str] = None) -> pd.DataFra
             os.makedirs(data_path.parent, exist_ok=True)
 
             # file locking
-            # file locking
             lock_path = str(data_path) + ".lock"
 
             # Use portalocker for cross-platform locking
             with portalocker.Lock(lock_path, mode='w', timeout=60):
                 if os.path.exists(data_path):
                     curr_df = pd.read_parquet(data_path)
-                    combined_df = pd.concat([curr_df, feast_df]).drop_duplicates(subset=["ticker", "event_timestamp"])
+                    combined_df = pd.concat([curr_df, feast_df])
+                    # Ensure columns are ordered after concat
+                    combined_df = combined_df.drop_duplicates(subset=["ticker", "event_timestamp"])
                     combined_df.to_parquet(data_path)
                 else:
                     feast_df.to_parquet(data_path)
                     
-            logger.debug(f"Saved features to {data_path}")
+            logger.debug(f"FEAST: Saved features to {data_path}")
 
             try:
                 from feast import FeatureStore
                 store = FeatureStore(repo_path=repo_path)
-                store.apply([])
-                logger.debug(f"Applied feature store")
+                
+                reg_path = repo_path / "data" / "registry.db"
+                
+                # Ensure the directory for registry.db exists
+                os.makedirs(reg_path.parent, exist_ok=True)
+
+                if not reg_path.exists():
+                    logger.info("FEAST: Applying registry")
+                    store.apply()
+                else:
+                    logger.info("FEAST: Skipping apply, registry already exists")
+                
+                logger.info("FEAST: Applying materialize_incremental")
+                store.materialize_incremental(end_date=datetime.utcnow())
+                logger.info("FEAST: materialization complete")
+
+                logger.info("FEAST: Integration complete")
+
+                """
+                import importlib.util
+
+                # Load feature definitions dynamically from the repo path
+                spec = importlib.util.spec_from_file_location("feature_store_mod", repo_path / "feature_store.py")
+                if spec is None or spec.loader is None:
+                     raise ImportError(f"Could not load feature_store.py from {repo_path}")
+                feature_store_mod = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(feature_store_mod)
+
+                store = FeatureStore(repo_path=str(repo_path))
+                
+                logger.info("FEAST: Applying feature definitions...")
+                # Apply the specific definitions found in feature_store.py
+                store.apply([feature_store_mod.ticker, feature_store_mod.feature_view, feature_store_mod.project])
+                logger.debug("FEAST: Applied feature store definitions")
+
+                logger.info("FEAST: Materializing feature store...")
+                store.materialize_incremental(end_date=datetime.datetime.now())
+                logger.debug("FEAST: Materialized feature store")"""
+
             except Exception as e:
-                logger.exception(f"FEAST: Error applying feature store: {e}")
-                raise PrismException(f"FEAST: Error applying feature store: {e}", sys)
+                logger.exception(f"FEAST: Error managing feature store: {e}")
+                raise PrismException(f"FEAST: Error managing feature store: {e}", sys)
 
-            # Running subprocesses
-            subprocess.run(["feast","apply"], cwd=repo_path, check=True, capture_output=True)
-
-            subprocess.run(
-                ["feast", "materialize-incremental", datetime.datetime.now().isoformat()],
-                cwd=repo_path,
-                check=True,
-                capture_output=True
-            )
-
-        except subprocess.CalledProcessError as e:
-            logger.exception(f"FEAST: Error materializing feature store: {e}")
-            raise PrismException(f"FEAST: Error materializing feature store: {e}", sys)
+        except Exception as e:
+            logger.exception(f"FEAST: Error in feature store integration: {e}")
+            # If it's already a PrismException, re-raise it, otherwise wrap it
+            if isinstance(e, PrismException):
+                raise e
+            raise PrismException(f"FEAST: Error in feature store integration: {e}", sys)
 
         return df
     except Exception as e:
         logger.exception(f"Failed to fetch data for {ticker}")
         raise PrismException(f"Failed to fetch data for {ticker}", sys)
 
-if __name__ == "__main__":
-    fetch_ohlcv("BTC-USD", "2010-01-01", "2025-12-31") # test point
 
-"""
-NEXT STEP: feast feature store integration
-"""
+

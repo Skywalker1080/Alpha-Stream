@@ -11,3 +11,5 @@ wheels/
 logs
 notebooks
 GEMINI.md
+
+feature_store/data
