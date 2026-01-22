@@ -1,6 +1,5 @@
-from dask.dot import name
 from datetime import timedelta
-from feast import FeatureStore, FeatureView, Field, FileSource, ValueType, Entity, Project
+from feast import FeatureView, Field, FileSource, ValueType, Entity, Project
 from feast.types import Float32
 
 # Defining Entity (primary key)
@@ -18,7 +17,7 @@ file_source = FileSource(
 )
 
 # Defining Feature View (Data Schema)
-feature_view = FeatureView(
+crypto_stats_fv = FeatureView(
     name="crypto_features",
     entities=[ticker],
     ttl=timedelta(days=36500),
@@ -32,6 +31,5 @@ feature_view = FeatureView(
         Field(name="MACD", dtype=Float32),
     ],
     online=True,
-    offline=True,
     source=file_source,
 )
