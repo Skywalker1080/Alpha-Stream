@@ -10,6 +10,10 @@ class Config:
     pred_len: int = 5 # forecast step
     features: List[str] = field(default_factory=lambda: ["Open", "High", "Low", "Close", "Volume", "RSI", "MACD"])
     
+    @property
+    def input_size(self) -> int:
+        return len(self.features)
+    
 
 @dataclass
 class IndicatorConfig:
@@ -17,3 +21,4 @@ class IndicatorConfig:
     RSI_WINDOW: int = 14
     MACD_FAST: int = 12
     MACD_SLOW: int = 26
+

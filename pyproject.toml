@@ -12,6 +12,7 @@ dependencies = [
     "python-dotenv",
     "absl-py>=2.3.1",
     "portalocker>=3.2.0",
+    "scikit-learn>=1.8.0",
 ]
 
 [build-system]
