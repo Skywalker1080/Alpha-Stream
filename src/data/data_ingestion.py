@@ -17,21 +17,21 @@ logger = get_logger()
 
 def RSI(series: pd.Series, window: int = 14) -> pd.Series:
     """Calculate the Relative Strength Index (RSI) for a given Series."""
-    logger.info("Calculating RSI")
+    logger.info("INGESTION - Calculating RSI")
     delta = series.diff()
     gain = delta.where(delta > 0, 0).rolling(window=window).mean()
     loss = -delta.where(delta < 0, 0).rolling(window=window).mean()
     rs = gain / loss
-    logger.info("Calculated RSI")
+    logger.info("INGESTION - Calculated RSI")
     return 100 - (100 / (1 + rs))
 
 def MACD(series: pd.Series, fast: int = 12, slow: int = 26) -> pd.Series:
     """Calculate the Moving Average Convergence Divergence (MACD) for a given Series."""
-    logger.info("Calculating MACD")
+    logger.info("INGESTION - Calculating MACD")
     ema_fast = series.ewm(span=fast, adjust=False).mean()
     ema_slow = series.ewm(span=slow, adjust=False).mean()
     macd = ema_fast - ema_slow
-    logger.info("Calculated MACD")
+    logger.info("INGESTION - Calculated MACD")
     return macd
 
 def fetch_ohlcv(ticker:str, start: str, end: Optional[str] = None) -> pd.DataFrame:
@@ -39,11 +39,11 @@ def fetch_ohlcv(ticker:str, start: str, end: Optional[str] = None) -> pd.DataFra
     config = Config()
     indicatorConfig = IndicatorConfig()
     try:
-        logger.info("INGESTION: fetching OHLCV data for {ticker}")
+        logger.info(f"INGESTION - fetching OHLCV data for {ticker}")
         df = yf.download(ticker, start=start, end=end, interval="1d", auto_adjust=True, progress=False)
         if df.empty:
-            logger.exception("INGESTION: No data downloaded for {ticker}")
-            raise PrismException("INGESTION: No data downloaded for {ticker}", sys)
+            logger.exception(f"INGESTION - No data downloaded for {ticker}")
+            raise PrismException(f"INGESTION - No data downloaded for {ticker}", sys)
 
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = df.columns.get_level_values(0)
@@ -56,25 +56,25 @@ def fetch_ohlcv(ticker:str, start: str, end: Optional[str] = None) -> pd.DataFra
 
         df = df[['date'] + config.features].dropna()
 
-        logger.info("VALIDATION: Validating data")
+        logger.info("VALIDATION - Validating data")
         # Validate Data
         if len(df) < config.context_len + config.pred_len:
-            logger.exception(f"VALIDATION: Not enough data for {ticker}. Need atleast {config.context_len + config.pred_len} data points.")
-            raise PrismException(f"VALIDATION: Not enough data for {ticker}. Need atleast {config.context_len + config.pred_len} data points.", sys)
+            logger.exception(f"VALIDATION - Not enough data for {ticker}. Need atleast {config.context_len + config.pred_len} data points.")
+            raise PrismException(f"VALIDATION - Not enough data for {ticker}. Need atleast {config.context_len + config.pred_len} data points.", sys)
         if df[config.features].isnull().any().any():
-            logger.exception(f"VALIDATION: NaN values found in features for {ticker}")
-            raise PrismException(f"VALIDATION: NaN values found in features for {ticker}", sys)
+            logger.exception(f"VALIDATION - NaN values found in features for {ticker}")
+            raise PrismException(f"VALIDATION - NaN values found in features for {ticker}", sys)
         if not df[config.features].apply(lambda x: pd.api.types.is_numeric_dtype(x)).all():
-            logger.exception(f"VALIDATION: Non-numeric values found in features for {ticker}")
-            raise PrismException(f"VALIDATION: Non-numeric values found in features for {ticker}", sys)
+            logger.exception(f"VALIDATION - Non-numeric values found in features for {ticker}")
+            raise PrismException(f"VALIDATION - Non-numeric values found in features for {ticker}", sys)
 
-        logger.debug(f"fetched {len(df)} rows for {ticker}")
-        logger.info(f"INGESTION: data ingestion complete")
+        logger.debug(f"INGESTION - Fetched {len(df)} rows for {ticker}")
+        logger.info(f"INGESTION - data ingestion complete")
         #=======================================
         # Feast Integration
         #=======================================
         try:
-            logger.info("FEAST: starting feast integration")
+            logger.info("FEAST - starting feast integration")
             # preparing data for feast
             feast_df = df.copy() # safe way to do it
             feast_df['ticker'] = ticker
@@ -103,7 +103,7 @@ def fetch_ohlcv(ticker:str, start: str, end: Optional[str] = None) -> pd.DataFra
                 else:
                     feast_df.to_parquet(data_path)
                     
-            logger.debug(f"FEAST: Saved features to {data_path}")
+            logger.debug(f"FEAST - Saved features to {data_path}")
 
             try:
                 from feast import FeatureStore
@@ -115,16 +115,16 @@ def fetch_ohlcv(ticker:str, start: str, end: Optional[str] = None) -> pd.DataFra
                 os.makedirs(reg_path.parent, exist_ok=True)
 
                 if not reg_path.exists():
-                    logger.info("FEAST: Applying registry")
+                    logger.info("FEAST - Applying registry")
                     store.apply()
                 else:
-                    logger.info("FEAST: Skipping apply, registry already exists")
+                    logger.info("FEAST - Skipping apply, registry already exists")
                 
-                logger.info("FEAST: Applying materialize_incremental")
+                logger.info("FEAST - Applying materialize_incremental")
                 store.materialize_incremental(end_date=datetime.utcnow())
-                logger.info("FEAST: materialization complete")
+                logger.info("FEAST - materialization complete")
 
-                logger.info("FEAST: Integration complete")
+                logger.info("FEAST - Integration complete")
 
                 """
                 import importlib.util
@@ -148,20 +148,20 @@ def fetch_ohlcv(ticker:str, start: str, end: Optional[str] = None) -> pd.DataFra
                 logger.debug("FEAST: Materialized feature store")"""
 
             except Exception as e:
-                logger.exception(f"FEAST: Error managing feature store: {e}")
-                raise PrismException(f"FEAST: Error managing feature store: {e}", sys)
+                logger.exception(f"FEAST - Error managing feature store: {e}")
+                raise PrismException(f"FEAST - Error managing feature store: {e}", sys)
 
         except Exception as e:
-            logger.exception(f"FEAST: Error in feature store integration: {e}")
+            logger.exception(f"FEAST - Error in feature store integration: {e}")
             # If it's already a PrismException, re-raise it, otherwise wrap it
             if isinstance(e, PrismException):
                 raise e
-            raise PrismException(f"FEAST: Error in feature store integration: {e}", sys)
+            raise PrismException(f"FEAST - Error in feature store integration: {e}", sys)
 
         return df
     except Exception as e:
-        logger.exception(f"Failed to fetch data for {ticker}")
-        raise PrismException(f"Failed to fetch data for {ticker}", sys)
+        logger.exception(f"INGESTION - Failed to fetch data for {ticker}")
+        raise PrismException(f"INGESTION - Failed to fetch data for {ticker}", sys)
 
 
 

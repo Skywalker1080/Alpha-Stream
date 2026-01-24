@@ -2,7 +2,7 @@ import torch
 from torch.utils.data import Dataset
 from sklearn.preprocessing import StandardScaler
 from src.exception.exceptions import PrismException
-import panads as pd
+import pandas as pd
 import sys
 from typing import Tuple
 from logger.logger import get_logger
@@ -27,13 +27,13 @@ class CryptoData(Dataset):
                 if past.shape == (context_len, len(Config().features)) and future.shape == (pred_len, len(Config().features)):
                     self.samples.append((past, future))
                 else:
-                    print(f"Ignoring invalid sample at index {t}, where shape: {past.shape} and {future.shape}")
+                    print(f"DATA PREPARATION - Ignoring invalid sample at index {t}, where shape: {past.shape} and {future.shape}")
 
             if not self.samples:
-                raise PrismException("No valid samples found", sys)
+                raise PrismException("DATA PREPARATION - No valid samples found", sys)
         except:
-            logger.exception("Failed to build dataset")
-            raise PrismException("Failed to build dataset", sys)
+            logger.exception("DATA PREPARATION - Failed to build dataset")
+            raise PrismException("DATA PREPARATION - Failed to build dataset", sys)
 
     def __len__(self) -> int:
         return len(self.samples)
