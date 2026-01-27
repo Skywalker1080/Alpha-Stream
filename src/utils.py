@@ -7,9 +7,12 @@ import json
 import matplotlib.pyplot as plt
 from sklearn.preprocessing._data import StandardScaler
 from src.exception.exceptions import PrismException
+from src.config.pipeline_config import Config
 from logger.logger import get_logger
 
 logger = get_logger()
+config = Config()
+
 
 def save_metrics(metrics: dict, out_dir: Path, ticker: str):
     try:
@@ -88,4 +91,13 @@ def save_model(model, scaler: StandardScaler, path: Path, ticker: str = None, mo
         return torch_path, scaler_path
     except Exception as e:
         logger.error(f"Failed to save model: {e}")
-        raise PipelineError(f"Failed to save model: {e}")
+        raise PrismException(f"Failed to save model: {e}")
+
+def check_model_exists(ticker: str = None, model_type: str ="child"):
+    """Check if model exists locally"""
+    if model_type == "parent":
+        path = Path(config.parent_dir) / f"{config.parent_ticker}_parent_model.pt"
+    else:
+        path = Path(config.child_dir) / f"{ticker}_child_model.pt"
+    return path.exists()
+

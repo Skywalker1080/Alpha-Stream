@@ -10,13 +10,13 @@ class Config:
     pred_len: int = 5 # forecast step
     features: List[str] = field(default_factory=lambda: ["Open", "High", "Low", "Close", "Volume", "RSI", "MACD"])
     parent_ticker: str = "BTC-USD"
-    start: str = "2005-01-01"
+    start: str = "2015-01-01"
     child_start: str = "2022-01-01"
     parent_epochs: int = 20
     child_epochs: int = 10
     transfer_strategy: str = "freeze"
     fine_tune_lr: float = 1e-4
-    workdir: str = "outputs"
+    workdir: str = "outputs"   
     batch_size: int = 32
 
     
@@ -28,6 +28,12 @@ class Config:
     def parent_dir(self) -> str:
         import os
         return os.path.join(self.workdir, "parent")
+
+    @property
+    def child_dir(self) -> str:
+        import os
+        return os.path.join(self.workdir) # Children are directly in outputs/{ticker} based on earlier listings, but let's check
+
     
 
 @dataclass

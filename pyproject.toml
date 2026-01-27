@@ -15,6 +15,7 @@ dependencies = [
     "scikit-learn>=1.8.0",
     "dagshub>=0.6.4",
     "mlflow>=3.8.1",
+    "redis>=4.6.0",
 ]
 
 [build-system]

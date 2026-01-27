@@ -1,4 +1,3 @@
-import subprocess
 import portalocker
 from datetime import datetime
 import yfinance as yf
@@ -11,7 +10,6 @@ from src.config.pipeline_config import IndicatorConfig, Config
 from datetime import datetime
 from pathlib import Path
 import os
-import subprocess
 
 logger = get_logger()
 
@@ -34,13 +32,17 @@ def MACD(series: pd.Series, fast: int = 12, slow: int = 26) -> pd.Series:
     logger.info("INGESTION - Calculated MACD")
     return macd
 
-def fetch_ohlcv(ticker:str, start: str, end: Optional[str] = None) -> pd.DataFrame:
+def fetch_ohlcv(ticker:str, start: str = Config.start, end: Optional[str] = None) -> pd.DataFrame:
     """Fetch open-high-low-close-volume data for a given ticker."""
     config = Config()
-    indicatorConfig = IndicatorConfig()
+    indicatorConfig = IndicatorConfig() # implement later
     try:
         logger.info(f"INGESTION - fetching OHLCV data for {ticker}")
         df = yf.download(ticker, start=start, end=end, interval="1d", auto_adjust=True, progress=False)
+        print(f"DEBUG: Downloaded DF Shape for {ticker}: {df.shape}")
+        if not df.empty:
+            print(f"DEBUG: Downloaded DF Head:\n{df.head()}")
+            print(f"DEBUG: Downloaded DF Tail:\n{df.tail()}")
         if df.empty:
             logger.exception(f"INGESTION - No data downloaded for {ticker}")
             raise PrismException(f"INGESTION - No data downloaded for {ticker}", sys)

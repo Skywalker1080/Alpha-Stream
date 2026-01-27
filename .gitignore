@@ -13,3 +13,6 @@ notebooks
 GEMINI.md
 
 feature_store/data
+mlruns
+outputs
+mlflow.db

@@ -68,7 +68,7 @@ This document outlines an iterative, agile development plan for building the `st
     - Create a `Dockerfile` for the backend service.
     - Update `docker-compose.yml` to include the backend service and manage dependencies (e.g., ensure it can connect to Redis).
 
-**Deliverable:** A containerized API that can serve a stock prediction for a given ticker.
+**Deliverable:** A containerized API that can serve a crypto prediction for a given ticker.
 
 ---
 
