@@ -9,7 +9,7 @@ executor = ThreadPoolExecutor(max_workers=4)
 
 # Metrics
 registry = CollectorRegistry()
-REDIS_STATUS = Gauge("redis_up", "Redis up=1/down=0", registry=registry)
+
 SYSTEM_CPU = Gauge("system_cpu_percent", "CPU percent", registry=registry)
 SYSTEM_RAM = Gauge("system_ram_used_mb", "RAM MB", registry=registry)
 SYSTEM_DISK = Gauge("system_disk_used_mb", "Disk Used MB", registry=registry)

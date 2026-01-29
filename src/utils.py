@@ -101,3 +101,8 @@ def check_model_exists(ticker: str = None, model_type: str ="child"):
         path = Path(config.child_dir) / f"{ticker}_child_model.pt"
     return path.exists()
 
+def initialize_dirs():
+    """Initialize output directories."""
+    config = Config()
+    os.makedirs(config.parent_dir, exist_ok=True)
+

@@ -6,23 +6,26 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.exceptions import HTTPException
-from backend.state import Redis_client, REDIS_STATUS
+from src.utils import initialize_dirs
+import Backend.state as app_state
+from Backend.state import Redis_client, REDIS_STATUS, registry
+from Backend.api import router
 
 logger = get_logger()
 
 app = FastAPI(title="Alpha Stream API", description="Backend for Alpha Stream", version="0.1.0")
+app.include_router(router)
 
-app.middleware(
+app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 @app.on_event("startup")
 async def startup():
-    # initalize_dirs()    implement this later in utils
+    initialize_dirs()
     
     # retry logic for redis
     for i in range(10):
@@ -41,6 +44,6 @@ async def startup():
     logger.error("BACKEND - Failed to connect to Redis")
 
 if __name__=="__main__":
-    uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("Backend.main:app", host="0.0.0.0", port=8000, reload=True)
 
     
