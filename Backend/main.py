@@ -1,4 +1,5 @@
 import asyncio
+import os
 import redis
 import uvicorn
 from logger.logger import get_logger
@@ -28,16 +29,19 @@ async def startup():
     initialize_dirs()
     
     # retry logic for redis
+    redis_host = os.getenv("REDIS_HOST", "redis")
+    redis_port = int(os.getenv("REDIS_PORT", 6379))
+    
     for i in range(10):
         try:
-            client = redis.Redis(host="redis", port=6379, db=0)
+            client = redis.Redis(host=redis_host, port=redis_port, db=0)
             client.ping()
             app_state.Redis_client = client
-            logger.info("BACKEND - System Online (FastAPI, Redis, Mlflow)")
+            logger.info(f"BACKEND - System Online (FastAPI, Redis at {redis_host}:{redis_port}, Mlflow)")
             REDIS_STATUS.set(1)
             return
         except Exception as e:
-            logger.warning(f"BACKEND - Waiting for Redis connection... attempting {i+1}/10")
+            logger.warning(f"BACKEND - Waiting for Redis connection... attempting {i+1}/10. Error: {str(e)}")
             await asyncio.sleep(5)
 
     REDIS_STATUS.set(0)
