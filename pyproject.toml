@@ -16,6 +16,7 @@ dependencies = [
     "dagshub>=0.6.4",
     "mlflow>=3.8.1",
     "redis>=4.6.0",
+    "qdrant-client>=1.16.2",
 ]
 
 [build-system]

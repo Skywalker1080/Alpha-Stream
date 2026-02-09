@@ -36,5 +36,32 @@ services:
     networks:
       - app_networks
 
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - app_networks
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://fastapi:8000
+    depends_on:
+      - fastapi
+    networks:
+      - app_networks
+
 volumes:
   redis_data:
+  qdrant_data:
+
+

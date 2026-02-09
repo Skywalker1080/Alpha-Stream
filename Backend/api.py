@@ -1,12 +1,16 @@
-from cProfile import label
+from pandas.io.common import file_exists
 from Backend.state import PREDICTION_LATENCY
 from Backend.state import PREDICTION_COUNTER
 from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 from src.exception.exceptions import PrismException
 import sys
+import time
+from src.agents.graph import analyze_stock  
+import os
 from src.config.pipeline_config import Config
 from pathlib import Path
+from Backend.schema import AnalyzeRequest
 from Backend.tasks import (
     run_training, run_blocking_fn, save_task_status,
     get_or_set_cache, get_task_key, get_task_status_redis,
@@ -16,6 +20,8 @@ from Backend.tasks import (
 from src.pipeline.training_pipeline import train_child, train_parent
 from src.pipeline.inference_pipeline import predict_child, predict_parent
 from src.utils import check_model_exists
+
+BASE_PATH = "outputs"
 
 from logger.logger import get_logger
 
@@ -34,8 +40,15 @@ def health():
     return {"status": "healthy"}
 
 @router.post("/analyze")
-def analyze():
-    pass # endpoint to call AI agent, to be implemented later
+def analyze(req: AnalyzeRequest):
+    if not req.ticker:
+        raise HTTPException(400, "ticker required")
+
+    try:
+        return analyze_stock(req.ticker, thread_id= req.thread_id)
+    except Exception as e:
+        raise HTTPException(500, f"Analysis failed: {str(e)}")
+    
 
 # Training Endpoints
 
@@ -152,3 +165,120 @@ async def predict_child_endpoint(request: Request):
         raise HTTPException(500, str(e))
     except Exception as e:
         raise HTTPException(500, str(e))
+
+# System monitoring Endpoints
+
+@router.get("/status/{task_id}")
+async def get_task_status(task_id: str):
+    """Check the status of the task"""
+    task = task_id.lower()
+    if task == "parent":
+        task == "parent_training"
+
+    status = get_task_status_redis(task)
+
+    ticker_for_disk = "parent" if task == "parent_training" else task.upper()
+    model_type = "parent" if task == "parent_training" else "child"
+    file_exists = check_model_exists(ticker_for_disk, model_type)
+
+    if not status:
+        if file_exists:
+            return {"status": "completed", "detail": "Model already exists", "task_id": task_id}
+        raise HTTPException(404, f"Model {ticker_for_disk} not found")
+
+    if status.get("status") not in ["running", "failed"] and file_exists:
+        status["status"] = "completed"
+
+    response = status.copy()
+    if response.get("status") == "running" and "start_time" in response:
+        try:
+            start_dt = datetime.strptime(response["start_time"], "%Y-%m-%d %H:%M:%S")
+            response["elapsed_seconds"] = int((datetime.now() - start_dt).total_seconds())
+        except Exception:
+            pass
+    
+    response.pop("start_time", None)
+    return response
+
+@router.get("/system/logs")
+async def get_system_logs(lines: int = 100):
+    """Get system logs"""
+    log_dir = "logs"
+    if not os.path.exists(log_dir):
+        return {"detail":"log directory not found"}
+
+    files = [f for f in os.listdir(log_dir) if f.endswith(".log")]
+    if not files:
+        return {"detail":"no log files found"}
+
+    latest_file = sorted(files)[-1]
+    path = os.path.join(log_dir, latest_file)
+    
+    try:
+        with open(path, "r") as f:
+            content = f.readlines()
+            last_lines = content[-lines:]
+            return {"logs": "".join(last_lines), "filename": latest_file}
+    except Exception as e:
+        return {"error": f"Failed to read logs: {e}"}
+
+@router.post("/monitor/parent")
+async def monitor_parent():
+    """Monitor parent model"""
+
+    config = Config()
+    ticker = config.parent_ticker
+
+    ### Implement Later
+    """
+    try:
+        drift = check_drift(ticker, BASE_PATH) # implement this function
+    except Exception as e:
+        drift_result = {"status": "failed", "error": str(e)}
+    """
+    ### Implement Later
+    """
+    try:
+        evaluator = AgentEvaluator(BASE_PATH) # implement this function
+        eval_res = evaluator.evaluate_live(ticker)
+    except Exception as e:
+        eval_res = {"status": "failed", "error": str(e)}
+    """
+    return {
+        "ticker": ticker,
+        "type": "Parent Model (Market Index)",
+        "drift": drift_res,
+        "agent_eval": eval_res,
+        "links": {
+            "get_drift_json": f"/monitor/{ticker}/drift",
+            "get_eval_json": f"/monitor/{ticker}/eval"
+        }
+    }
+"""
+@router.post("/monitor/{ticker}")
+async def trigger_monitoring(ticker: str):
+    Trigger live monitoring for a ticker.
+    cfg = Config()
+    clean_ticker = ticker.strip().upper()
+    is_parent = (clean_ticker == cfg.parent_ticker)
+    
+    drift_res = {"status": "skipped", "detail": "Drift calculation reserved for parent model."}
+    if is_parent:
+        try:
+            #drift_res = check_drift(clean_ticker, BASE_PATH)
+        except Exception as e:
+            #drift_res = {"status": "failed", "error": str(e)}
+        
+    try:
+        #evaluator = AgentEvaluator(BASE_PATH)
+        #eval_res = evaluator.evaluate_live(clean_ticker)
+    except Exception as e:
+        #eval_res = {"status": "failed", "error": str(e)}
+            
+    return {
+        "ticker": clean_ticker,
+        "is_parent": is_parent,
+        "drift": drift_res,
+        "agent_eval": eval_res
+    }
+"""

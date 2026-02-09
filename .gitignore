@@ -16,3 +16,4 @@ feature_store/data
 mlruns
 outputs
 mlflow.db
+.env
