@@ -22,7 +22,7 @@ class AgentState(MessagesState):
     predictions: str
     news_sentiment: str
     final_report: str
-    recommendations: str
+    recommendation: str
     confidence: str
 
 def build_graph():

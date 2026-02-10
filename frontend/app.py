@@ -10,7 +10,7 @@ from datetime import datetime
 
 # ----------------- CONFIG -----------------
 API_URL = os.getenv("API_URL", "http://localhost:8000")
-st.set_page_config(page_title="AI Financial Analyst", layout="wide", page_icon="📈")
+st.set_page_config(page_title="Crypto Prism Ops", layout="wide")
 
 # Custom CSS for Professional Look
 st.markdown("""
@@ -22,9 +22,10 @@ st.markdown("""
     .metric-card {
         background-color: #1e2130;
         padding: 20px;
-        border-radius: 10px;
+        border-radius: 8px;
         border: 1px solid #2e3140;
         text-align: center;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
     }
     .metric-value {
         font-size: 24px;
@@ -44,8 +45,8 @@ if "session_id" not in st.session_state:
 
 # ----------------- SIDEBAR ----------------
 with st.sidebar:
-    st.title("📈 AI Analyst")
-    st.caption("Institutional-grade market intelligence")
+    st.title("Crypto Prism Ops")
+    st.caption("Institutional-Grade Market Intelligence")
     
     ticker = st.text_input("Ticker Symbol", value="NVDA", help="e.g., AAPL, TSLA, BTC-USD").strip().upper()
     run_btn = st.button("Generate Analysis", type="primary", use_container_width=True)
@@ -193,7 +194,7 @@ if "active_ticker" in st.session_state and st.session_state.active_ticker:
         status_container = st.container()
         
         with status_container:
-            with st.spinner(f"🔍 Analyzing {ticker}..."):
+            with st.spinner(f"Analyzing {ticker}..."):
                 try:
                     payload = {"ticker": ticker, "thread_id": st.session_state.session_id}
                     resp = requests.post(f"{API_URL}/analyze", json=payload, timeout=120)
@@ -203,7 +204,7 @@ if "active_ticker" in st.session_state and st.session_state.active_ticker:
                         
                         # Case A: Need Training
                         if data.get("status") == "training":
-                            st.warning(f"🏗️ Constructing Neural Model (First-time run)...")
+                            st.warning(f"Constructing Model (Initial Training Required)...")
                             prog_bar = st.progress(0)
                             status_text = st.empty()
                             
@@ -223,25 +224,25 @@ if "active_ticker" in st.session_state and st.session_state.active_ticker:
                                         
                                         if status == "completed":
                                             prog_bar.progress(100)
-                                            status_text.success("✅ Model Training Complete!")
+                                            status_text.success("Model Training Complete")
                                             time.sleep(1) # Small delay for visual feedback
                                             st.rerun() # Refresh to start clean analysis
                                             break
                                         elif status == "failed":
-                                            st.error(f"❌ Model Training Failed for {ticker}")
+                                            st.error(f"Model Training Failed for {ticker}")
                                             st.session_state.active_ticker = None
                                             st.stop()
                                         else:
                                             # Progress heuristic (most stocks take 30-60s)
                                             prog = min(elapsed * 2, 95) 
                                             prog_bar.progress(int(prog))
-                                            status_text.text(f"🚀 Training LSTM... {elapsed}s elapsed")
+                                            status_text.text(f"Training LSTM... {elapsed}s elapsed")
                                 except Exception as e:
                                     status_text.warning(f"Waiting for updates... ({e})")
                         
                         # Case B: Error from Agent
                         if data.get("status") == "error":
-                            st.error(f"❌ Analysis failed: {data.get('detail')}")
+                            st.error(f"Analysis failed: {data.get('detail')}")
                             st.session_state.active_ticker = None
                             st.stop()
 
@@ -270,7 +271,7 @@ if "active_ticker" in st.session_state and st.session_state.active_ticker:
         forecast, history = parse_predictions(preds_raw)
         
         # KPIs
-        st.markdown(f"## 🏛️ Analysis: {ticker}")
+        st.markdown(f"## Analysis: {ticker}")
         
         kpi1, kpi2, kpi3 = st.columns(3)
         
@@ -292,7 +293,7 @@ if "active_ticker" in st.session_state and st.session_state.active_ticker:
         st.markdown("---")
         
         # TABS
-        tab_report, tab_chart = st.tabs(["📝 Strategic Report", "📊 Technical Forecast"])
+        tab_report, tab_chart = st.tabs(["Strategic Report", "Technical Forecast"])
         
         with tab_report:
             if report:
@@ -311,7 +312,7 @@ else:
     Enter a stock ticker in the sidebar to begin.
     
     **Features:**
-    - 🧠 autonomous multi-agent research
-    - 📈 LSTM technical price forecasting
-    - 📰 Real-time news sentiment analysis
+    - Autonomous multi-agent research
+    - LSTM technical price forecasting
+    - Real-time news sentiment analysis
     """)

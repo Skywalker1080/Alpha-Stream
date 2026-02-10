@@ -98,7 +98,7 @@ def check_model_exists(ticker: str = None, model_type: str ="child"):
     if model_type == "parent":
         path = Path(config.parent_dir) / f"{config.parent_ticker}_parent_model.pt"
     else:
-        path = Path(config.child_dir) / f"{ticker}_child_model.pt"
+        path = Path(config.child_dir) / ticker / f"{ticker}_child_model.pt"
     return path.exists()
 
 def initialize_dirs():

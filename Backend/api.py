@@ -118,7 +118,7 @@ async def predict_parent_endpoint():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/predict-child")
-async def predict_child_endpoint(request: Request):
+async def predict_child_endpoint(request: Request, response: Response):
     """Get child predictions"""
     data = await request.json()
     ticker = data.get("ticker", "").strip().upper()
