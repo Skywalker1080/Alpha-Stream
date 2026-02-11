@@ -48,11 +48,11 @@ with st.sidebar:
     st.title("Crypto Prism Ops")
     st.caption("Institutional-Grade Market Intelligence")
     
-    ticker = st.text_input("Ticker Symbol", value="NVDA", help="e.g., AAPL, TSLA, BTC-USD").strip().upper()
+    ticker = st.text_input("Ticker Symbol", value="BTC-USD", help="e.g., BNB-USD, ETH-USD, SOL-USD").strip().upper()
     run_btn = st.button("Generate Analysis", type="primary", use_container_width=True)
     
     st.markdown("---")
-    st.info("Powered by LangGraph & Feast")
+    st.info("Powered by yfinance & LangGraph")
     st.markdown(f"Session: `{st.session_state.session_id[:8]}`")
 
 # ----------------- HELPERS ----------------
@@ -309,7 +309,7 @@ else:
     # Landing Page State
     st.markdown("### Ready to Analyze")
     st.markdown("""
-    Enter a stock ticker in the sidebar to begin.
+    Enter a crypto ticker in the sidebar to begin.
     
     **Features:**
     - Autonomous multi-agent research

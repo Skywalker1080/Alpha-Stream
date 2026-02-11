@@ -16,6 +16,9 @@ from Backend.tasks import (
     get_or_set_cache, get_task_key, get_task_status_redis,
     delete_task_status
 )
+from src.monitoring.drift_check import check_drift
+
+from Backend.rate_limiter import rate_limit_decorator
 
 from src.pipeline.training_pipeline import train_child, train_parent
 from src.pipeline.inference_pipeline import predict_child, predict_parent
@@ -53,6 +56,7 @@ def analyze(req: AnalyzeRequest):
 # Training Endpoints
 
 @router.post("/train-parent")
+@rate_limit_decorator(limit=3, window_sec=60, key_prefix="train_parent")
 async def train_parent_model():
     """Start parent model training"""
     task_id = "parent_training" # later implement task_id generation 
@@ -67,6 +71,7 @@ async def train_parent_model():
     return {"status": "started", "task_id": task_id}
 
 @router.post("/train-child")
+@rate_limit_decorator(limit=3, window_sec=60, key_prefix="train_child")
 async def train_child_model(request: Request):
     """Start child model training"""
     data = await request.json()
@@ -105,6 +110,7 @@ async def train_child_model(request: Request):
 # Prediciton Endpoints
 
 @router.post("/predict-parent")
+@rate_limit_decorator(limit=3, window_sec=60, key_prefix="predict_parent")
 async def predict_parent_endpoint():
     """Get parent predictions"""
     PREDICTION_COUNTER.labels(type="parent").inc()
@@ -118,6 +124,7 @@ async def predict_parent_endpoint():
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/predict-child")
+@rate_limit_decorator(limit=3, window_sec=60, key_prefix="predict_child")
 async def predict_child_endpoint(request: Request, response: Response):
     """Get child predictions"""
     data = await request.json()
@@ -230,34 +237,34 @@ async def monitor_parent():
     ticker = config.parent_ticker
 
     ### Implement Later
-    """
+    
     try:
-        drift = check_drift(ticker, BASE_PATH) # implement this function
+        drift_result = check_drift(ticker, BASE_PATH) # implement this function
     except Exception as e:
         drift_result = {"status": "failed", "error": str(e)}
-    """
+    
     ### Implement Later
     """
     try:
         evaluator = AgentEvaluator(BASE_PATH) # implement this function
         eval_res = evaluator.evaluate_live(ticker)
     except Exception as e:
-        eval_res = {"status": "failed", "error": str(e)}
-    """
+        eval_res = {"status": "failed", "error": str(e)}"""
+    
     return {
         "ticker": ticker,
         "type": "Parent Model (Market Index)",
-        "drift": drift_res,
-        "agent_eval": eval_res,
+        "drift": drift_result,
+        "agent_eval": "not implemented yet",
         "links": {
             "get_drift_json": f"/monitor/{ticker}/drift",
             "get_eval_json": f"/monitor/{ticker}/eval"
         }
     }
-"""
+
 @router.post("/monitor/{ticker}")
 async def trigger_monitoring(ticker: str):
-    Trigger live monitoring for a ticker.
+    """Trigger live monitoring for a ticker."""
     cfg = Config()
     clean_ticker = ticker.strip().upper()
     is_parent = (clean_ticker == cfg.parent_ticker)
@@ -265,20 +272,36 @@ async def trigger_monitoring(ticker: str):
     drift_res = {"status": "skipped", "detail": "Drift calculation reserved for parent model."}
     if is_parent:
         try:
-            #drift_res = check_drift(clean_ticker, BASE_PATH)
+            drift_res = check_drift(clean_ticker, BASE_PATH)
         except Exception as e:
-            #drift_res = {"status": "failed", "error": str(e)}
-        
+            drift_res = {"status": "failed", "error": str(e)}
+    """ 
     try:
         #evaluator = AgentEvaluator(BASE_PATH)
-        #eval_res = evaluator.evaluate_live(clean_ticker)
+        eval_res = evaluator.evaluate_live(clean_ticker)
     except Exception as e:
-        #eval_res = {"status": "failed", "error": str(e)}
+        #eval_res = {"status": "failed", "error": str(e)}"""
             
     return {
         "ticker": clean_ticker,
         "is_parent": is_parent,
         "drift": drift_res,
-        "agent_eval": eval_res
+        "agent_eval": "not implemented yet"
     }
-"""
+
+@router.get("/monitor/{ticker}/drift")
+def get_drift_result(ticker: str):
+    t = ticker.lower()
+    drift_dir = os.path.join(BASE_PATH, t, "drift")
+    if not os.path.exists(drift_dir):
+        raise HTTPException(404, detail=f"No drift report for {ticker} found")
+
+    json_path = os.path.join(drift_dir, "latest_drift.json")
+    if not os.path.exists(json_path):
+        raise HTTPException(404, detail=f"No drift report for {ticker} found")
+
+    with open(json_path, "r") as f:
+        data = json.load(f)
+
+    files = os.listdir(drift_dir)
+    return {"files": files, "message": "Access HTML report in outputs/", "detail": "JSON summary missing."}

@@ -22,3 +22,7 @@ PREDICTION_COUNTER = Counter("prediction_total", "Total predictions", ["type"], 
 PREDICTION_LATENCY = Histogram("prediction_latency_seconds", "Prediction latency", ["type"], registry=registry)
 CACHE_HIT = Counter("redis_cache_hit_total", "Cache hits", ["key"], registry=registry)
 CACHE_MISS = Counter("redis_cache_miss_total", "Cache misses", ["key"], registry=registry)
+
+# Drift Metrics
+DRIFT_SCORE = Gauge("model_drift_score", "Drift score for ticker", ["ticker"], registry=registry)
+VOLATILITY_INDEX = Gauge("model_volatility_index", "Volatility index for ticker", ["ticker"], registry=registry)

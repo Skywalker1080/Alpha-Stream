@@ -2,14 +2,26 @@ import asyncio
 import os
 import redis
 import uvicorn
+import psutil
+import shutil
 from logger.logger import get_logger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.exceptions import HTTPException
+from prometheus_fastapi_instrumentator import Instrumentator
+
 from src.utils import initialize_dirs
 import Backend.state as app_state
-from Backend.state import Redis_client, REDIS_STATUS, registry
+from Backend.state import (
+    Redis_client, 
+    REDIS_STATUS, 
+    registry, 
+    SYSTEM_CPU, 
+    SYSTEM_RAM, 
+    SYSTEM_DISK, 
+    REDIS_KEYS
+)
 from Backend.api import router
 
 logger = get_logger()

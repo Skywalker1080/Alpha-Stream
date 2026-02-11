@@ -17,6 +17,8 @@ dependencies = [
     "mlflow>=3.8.1",
     "redis>=4.6.0",
     "qdrant-client>=1.16.2",
+    "streamlit>=1.54.0",
+    "prometheus-fastapi-instrumentator>=7.1.0",
 ]
 
 [build-system]
