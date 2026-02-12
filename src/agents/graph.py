@@ -60,10 +60,10 @@ def analyze_stock(ticker: str, thread_id: str = None):
             pass
 
     # Initialize Memory
+    mem = None
     query_vec = None
     if embedder:
         try:
-            # Relies on QDRANT_HOST env var or defaults to 'qdrant'
             mem = SemanticCache(collection_name="dataset_cache")
             
             # Create query embedding
@@ -160,7 +160,7 @@ def analyze_stock(ticker: str, thread_id: str = None):
     if isinstance(raw_data, dict):
         result["predictions"] = raw_data.get("result", {}).get("predictions", {})
 
-    if embedder and "final_report" in result:
+    if embedder and mem and "final_report" in result:
         try:
             # Check if query_vec is available, if not, re-generate it
             if query_vec is None:
@@ -187,7 +187,7 @@ def analyze_stock(ticker: str, thread_id: str = None):
                 mem.save_episode(
                     ticker=ticker_upper,
                     summary=result["final_report"],
-                    embedding=query_vec, # Reuse the query vector as the key
+                    embeddings=query_vec, # Reuse the query vector as the key
                     recommendation=rec,
                     confidence=conf,
                     last_price=last_price,

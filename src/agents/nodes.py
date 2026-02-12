@@ -88,6 +88,8 @@ def report_generator(state: dict) -> dict:
     logger.info(f"Running Report Generator Node: {ticker}")
     predictions = state.get("predictions", "")
     news = state.get("news_sentiment", "")
+    
+    logger.info(f"Report Generator: Input Predictions len={len(predictions)}, News len={len(news)}")
 
     prompt = f"""
     Write a clean Bloomberg style markdown report for {ticker}.
@@ -140,6 +142,8 @@ def critic_node(state: dict) -> dict:
     logger.info(f"Running Critic Node: {ticker}")
     current_report = state.get("final_report", "")
     predictions = state.get("predictions", "")
+    
+    logger.info(f"Critic Node: Received report length: {len(current_report)}, Predictions length: {len(predictions)}")
 
     prompt = f"""
     You are a Senior Editor. critique and refine this financial report.

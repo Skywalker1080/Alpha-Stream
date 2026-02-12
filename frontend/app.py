@@ -197,7 +197,7 @@ if "active_ticker" in st.session_state and st.session_state.active_ticker:
             with st.spinner(f"Analyzing {ticker}..."):
                 try:
                     payload = {"ticker": ticker, "thread_id": st.session_state.session_id}
-                    resp = requests.post(f"{API_URL}/analyze", json=payload, timeout=120)
+                    resp = requests.post(f"{API_URL}/analyze", json=payload, timeout=300)
                     
                     if resp.status_code == 200:
                         data = resp.json()
