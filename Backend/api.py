@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 from src.exception.exceptions import PrismException
 import sys
+import datetime
 import time
 from src.agents.graph import analyze_stock  
 import os
@@ -200,7 +201,7 @@ async def get_task_status(task_id: str):
     if response.get("status") == "running" and "start_time" in response:
         try:
             start_dt = datetime.strptime(response["start_time"], "%Y-%m-%d %H:%M:%S")
-            response["elapsed_seconds"] = int((datetime.now() - start_dt).total_seconds())
+            response["elapsed_seconds"] = int((datetime.datetime.now() - start_dt).total_seconds())
         except Exception:
             pass
     

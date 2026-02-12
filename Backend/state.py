@@ -1,14 +1,14 @@
 import redis
 from typing import Optional
 from concurrent.futures import ThreadPoolExecutor
-from prometheus_client import CollectorRegistry, Gauge, Counter, Histogram
+from prometheus_client import CollectorRegistry, Gauge, Counter, Histogram, REGISTRY
 
 # Shared State
 Redis_client: Optional[redis.Redis] = None
 executor = ThreadPoolExecutor(max_workers=4)
 
 # Metrics
-registry = CollectorRegistry()
+registry = REGISTRY
 
 SYSTEM_CPU = Gauge("system_cpu_percent", "CPU percent", registry=registry)
 SYSTEM_RAM = Gauge("system_ram_used_mb", "RAM MB", registry=registry)

@@ -60,6 +60,7 @@ def analyze_stock(ticker: str, thread_id: str = None):
             pass
 
     # Initialize Memory
+    query_vec = None
     if embedder:
         try:
             # Relies on QDRANT_HOST env var or defaults to 'qdrant'
@@ -94,6 +95,7 @@ def analyze_stock(ticker: str, thread_id: str = None):
                     }
         except Exception as e:
             print(f"Semantic Cache Error: {e}")
+            # If error occurred, query_vec might be None or partial, but we proceed to fetch fresh data
 
     
     # FETCH DATA & RUN AGENT
@@ -160,6 +162,11 @@ def analyze_stock(ticker: str, thread_id: str = None):
 
     if embedder and "final_report" in result:
         try:
+            # Check if query_vec is available, if not, re-generate it
+            if query_vec is None:
+                query_text = f"Analysis report for {ticker_upper}"
+                query_vec = embedder.embed_query(query_text)
+
             # Extract metadata
             rec = result.get("recommendation", "Neutral")
             conf = result.get("confidence", "Medium")
@@ -176,16 +183,19 @@ def analyze_stock(ticker: str, thread_id: str = None):
                     if fc:
                         last_price = float(fc[0].get("close", 0))
 
-            mem.save_episode(
-                ticker=ticker_upper,
-                summary=result["final_report"],
-                embedding=query_vec, # Reuse the query vector as the key
-                recommendation=rec,
-                confidence=conf,
-                last_price=last_price,
-                predictions=preds_data if isinstance(preds_data, dict) else {}
-            )
-            print(f"Saved to Qdrant: {ticker_upper}")
+            if query_vec:
+                mem.save_episode(
+                    ticker=ticker_upper,
+                    summary=result["final_report"],
+                    embedding=query_vec, # Reuse the query vector as the key
+                    recommendation=rec,
+                    confidence=conf,
+                    last_price=last_price,
+                    predictions=preds_data if isinstance(preds_data, dict) else {}
+                )
+                print(f"Saved to Qdrant: {ticker_upper}")
+            else:
+                print("Warning: Could not save to cache because query_vec generation failed.")
         except Exception as e:
             print(f"Failed to save cache: {e}")
     

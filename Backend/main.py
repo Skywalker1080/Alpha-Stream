@@ -36,6 +36,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Initialize Prometheus Instrumentator
+instrumentator = Instrumentator(
+    should_group_status_codes=False,
+    should_ignore_untemplated=True,
+    should_respect_env_var=False,
+    should_instrument_requests_inprogress=True,
+    excluded_handlers=[".*admin.*", "/metrics"],
+    env_var_name="ENABLE_METRICS",
+)
+instrumentator.instrument(app).expose(app, endpoint="/metrics")
+
 @app.on_event("startup")
 async def startup():
     initialize_dirs()
@@ -44,6 +55,7 @@ async def startup():
     redis_host = os.getenv("REDIS_HOST", "redis")
     redis_port = int(os.getenv("REDIS_PORT", 6379))
     
+    connected = False
     for i in range(10):
         try:
             client = redis.Redis(host=redis_host, port=redis_port, db=0)
@@ -51,13 +63,49 @@ async def startup():
             app_state.Redis_client = client
             logger.info(f"BACKEND - System Online (FastAPI, Redis at {redis_host}:{redis_port}, Mlflow)")
             REDIS_STATUS.set(1)
-            return
+            connected = True
+            break
         except Exception as e:
             logger.warning(f"BACKEND - Waiting for Redis connection... attempting {i+1}/10. Error: {str(e)}")
             await asyncio.sleep(5)
 
-    REDIS_STATUS.set(0)
-    logger.error("BACKEND - Failed to connect to Redis")
+    if not connected:
+        REDIS_STATUS.set(0)
+        logger.error("BACKEND - Failed to connect to Redis")
+    
+    # Start background task for metrics
+    asyncio.create_task(metrics_updater())
+
+async def metrics_updater():
+    """Background task to update system and redis metrics every 15 seconds."""
+    while True:
+        try:
+            # CPU
+            SYSTEM_CPU.set(psutil.cpu_percent())
+            
+            # RAM
+            ram = psutil.virtual_memory()
+            SYSTEM_RAM.set(ram.used / (1024 * 1024)) # MB
+            
+            # Disk
+            total, used, free = shutil.disk_usage("/")
+            SYSTEM_DISK.set(used / (1024 * 1024)) # MB
+            
+            # Redis Keys
+            if app_state.Redis_client:
+                try:
+                    num_keys = app_state.Redis_client.dbsize()
+                    REDIS_KEYS.set(num_keys)
+                    REDIS_STATUS.set(1)
+                except:
+                    REDIS_STATUS.set(0)
+            else:
+                REDIS_STATUS.set(0)
+                
+        except Exception as e:
+            logger.error(f"Metrics updater error: {str(e)}")
+            
+        await asyncio.sleep(15)
 
 if __name__=="__main__":
     uvicorn.run("Backend.main:app", host="0.0.0.0", port=8000, reload=True)
