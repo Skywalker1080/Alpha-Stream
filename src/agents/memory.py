@@ -2,6 +2,9 @@ import os
 import uuid
 import time 
 from datetime import datetime, timedelta
+from logger.logger import get_logger
+
+logger = get_logger()
 
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import (
@@ -104,5 +107,24 @@ class SemanticCache:
             query_filter=ticker_filter,
         )
 
-        return result.points
+    def clear_cache(self, delete_collection: bool = False):
+        """Reset the cache by deleting all points or the collection itself."""
+        if delete_collection:
+            self.client.delete_collection(collection_name=self.collection_name)
+            self._ensure_collection()
+            logger.info(f"Qdrant collection '{self.collection_name}' deleted and recreated.")
+        else:
+            # Delete all points using a filter that matches everything (e.g., created_at_ts > 0)
+            self.client.delete(
+                collection_name=self.collection_name,
+                points_selector=Filter(
+                    must=[
+                        FieldCondition(
+                            key="created_at_ts",
+                            range=Range(gte=0),
+                        ),
+                    ]
+                ),
+            )
+            logger.info(f"All points deleted from Qdrant collection '{self.collection_name}'.")
         

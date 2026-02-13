@@ -18,6 +18,7 @@ from Backend.tasks import (
     delete_task_status
 )
 from src.monitoring.drift_check import check_drift
+from src.agents.memory import SemanticCache
 
 from Backend.rate_limiter import rate_limit_decorator
 
@@ -230,6 +231,39 @@ async def get_system_logs(lines: int = 100):
     except Exception as e:
         return {"error": f"Failed to read logs: {e}"}
 
+@router.post("/system/reset")
+async def reset_system():
+    """Resets all the cache from Qdrant and Redis"""
+    results = {}
+    
+    # 1. Reset Redis
+    try:
+        from Backend.state import Redis_client
+        if Redis_client:
+            Redis_client.flushdb()
+            results["redis"] = "success (flushed db)"
+        else:
+            results["redis"] = "skipped (no client)"
+    except Exception as e:
+        logger.error(f"Failed to reset Redis: {e}")
+        results["redis"] = f"failed: {str(e)}"
+
+    # 2. Reset Qdrant
+    try:
+        # Initialize SemanticCache - it will use default collection name "dataset_cache"
+        cache = SemanticCache()
+        cache.clear_cache(delete_collection=True)
+        results["qdrant"] = "success (recreated collection)"
+    except Exception as e:
+        logger.error(f"Failed to reset Qdrant: {e}")
+        results["qdrant"] = f"failed: {str(e)}"
+
+    return {
+        "status": "reset complete",
+        "timestamp": datetime.datetime.now().isoformat(),
+        "results": results
+    }
+
 @router.post("/monitor/parent")
 async def monitor_parent():
     """Monitor parent model"""
@@ -270,12 +304,10 @@ async def trigger_monitoring(ticker: str):
     clean_ticker = ticker.strip().upper()
     is_parent = (clean_ticker == cfg.parent_ticker)
     
-    drift_res = {"status": "skipped", "detail": "Drift calculation reserved for parent model."}
-    if is_parent:
-        try:
-            drift_res = check_drift(clean_ticker, BASE_PATH)
-        except Exception as e:
-            drift_res = {"status": "failed", "error": str(e)}
+    try:
+        drift_res = check_drift(clean_ticker, BASE_PATH)
+    except Exception as e:
+        drift_res = {"status": "failed", "error": str(e)}
     """ 
     try:
         #evaluator = AgentEvaluator(BASE_PATH)
@@ -304,5 +336,8 @@ def get_drift_result(ticker: str):
     with open(json_path, "r") as f:
         data = json.load(f)
 
-    files = os.listdir(drift_dir)
-    return {"files": files, "message": "Access HTML report in outputs/", "detail": "JSON summary missing."}
+    return {
+        "ticker": ticker,
+        "data": data,
+        "history": os.listdir(drift_dir)
+    }
