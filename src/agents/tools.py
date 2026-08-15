@@ -1,6 +1,5 @@
 import os
 import requests
-from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -8,10 +7,11 @@ API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 
 def fetch_prediction_data(ticker: str):
     """
-    Fetch raw prediction data (dict) or return error/training string.
+    Fetch raw prediction data (dict) or return error/training dict/string.
     Returns:
        - dict: if successful (contains 'result')
-       - str: if error or training ("__MODEL_TRAINING__")
+       - dict: if 202 (training in progress, contains 'status'/'task_id')
+       - str:  if error
     """
     try:
         r = requests.post(
@@ -21,7 +21,10 @@ def fetch_prediction_data(ticker: str):
         )
 
         if r.status_code == 202:
-            return "__MODEL_TRAINING__"
+            try:
+                return r.json()
+            except Exception:
+                return "__MODEL_TRAINING__"
 
         if r.status_code != 200:
             return f"Prediction error {r.status_code}: {r.text}"
@@ -35,6 +38,8 @@ def get_stock_prediction(ticker: str):
     data = fetch_prediction_data(ticker=ticker)
     if isinstance(data, str):
         return data
+    if isinstance(data, dict) and data.get("status") == "training":
+        return "__MODEL_TRAINING__"
     
     try:
         forecast = (

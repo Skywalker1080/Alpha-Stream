@@ -213,8 +213,13 @@ if "active_ticker" in st.session_state and st.session_state.active_ticker:
                             
                             # Polling Loop
                             start_poll = time.time()
+                            poll_timeout = 20 * 60  # 20 min max
                             while True:
                                 time.sleep(3)
+                                if time.time() - start_poll > poll_timeout:
+                                    st.error(f"Timed out waiting for model training for {ticker}")
+                                    st.session_state.active_ticker = None
+                                    st.stop()
                                 try:
                                     st_resp = requests.get(f"{API_URL}/status/{poll_id}")
                                     if st_resp.status_code == 200:
@@ -237,6 +242,13 @@ if "active_ticker" in st.session_state and st.session_state.active_ticker:
                                             prog = min(elapsed * 2, 95) 
                                             prog_bar.progress(int(prog))
                                             status_text.text(f"Training LSTM... {elapsed}s elapsed")
+                                    elif st_resp.status_code == 404:
+                                        # Task not registered yet — keep waiting briefly
+                                        status_text.text("Waiting for training to start...")
+                                    else:
+                                        st.error(f"Error checking training status ({st_resp.status_code})")
+                                        st.session_state.active_ticker = None
+                                        st.stop()
                                 except Exception as e:
                                     status_text.warning(f"Waiting for updates... ({e})")
                         

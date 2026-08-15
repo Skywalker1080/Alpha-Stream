@@ -1,21 +1,22 @@
 import asyncio
 import json
-import asyncio
 import time
 from datetime import datetime
 from typing import Dict, Any, Optional
 
 from logger.logger import get_logger
 
-logger = get_logger()
-
+import Backend.state as app_state
 from Backend.state import (
-    Redis_client,
     executor,
     TRAINING_DURATION, TRAINING_STATUS, TRAINING_MSE,
-    SYSTEM_CPU, SYSTEM_RAM, SYSTEM_DISK, REDIS_KEYS,
     CACHE_HIT, CACHE_MISS
 )
+
+logger = get_logger()
+
+def _redis():
+    return app_state.Redis_client
 
 def refresh_system_metrics():
     pass # in monitoring run
@@ -24,16 +25,17 @@ def get_or_set_cache(key: str, compute_fn, expire: int = 86400):
     """Helper to check Redis cache or compute and cache."""
     refresh_system_metrics()
     try:
-        if Redis_client:
-            val = Redis_client.get(key)
+        redis = _redis()
+        if redis:
+            val = redis.get(key)
             if val:
                 CACHE_HIT.labels(key).inc()
                 return json.loads(val), True
 
         result = compute_fn()
         
-        if Redis_client:
-            Redis_client.set(key, json.dumps(result), ex=expire)
+        if redis:
+            redis.set(key, json.dumps(result), ex=expire)
             CACHE_MISS.labels(key).inc()
         return result, False
     except Exception as e:
@@ -48,16 +50,18 @@ def get_task_key(task_id: str) -> str:
 def save_task_status(task_id: str, status_data: Dict[str, Any], ttl: int = 3600):
     """Save task status to Redis"""
     try:
-        if Redis_client:
-            Redis_client.set(get_task_key(task_id), json.dumps(status_data), ex=ttl)
+        redis = _redis()
+        if redis:
+            redis.set(get_task_key(task_id), json.dumps(status_data), ex=ttl)
     except Exception as e:
         logger.error(f"Failed to save task status for {task_id}: {str(e)}")
 
 def get_task_status_redis(task_id: str) -> Optional[Dict[str, Any]]:
     """Get task status from Redis"""
     try:
-        if Redis_client:
-            val = Redis_client.get(get_task_key(task_id))
+        redis = _redis()
+        if redis:
+            val = redis.get(get_task_key(task_id))
             if val:
                 return json.loads(val)
     except Exception as e:
@@ -67,8 +71,9 @@ def get_task_status_redis(task_id: str) -> Optional[Dict[str, Any]]:
 def delete_task_status(task_id: str):
     """Delete task status from Redis"""
     try:
-        if Redis_client:
-            Redis_client.delete(get_task_key(task_id))
+        redis = _redis()
+        if redis:
+            redis.delete(get_task_key(task_id))
     except Exception as e:
         logger.error(f"Failed to delete task status for {task_id}: {str(e)}")
 

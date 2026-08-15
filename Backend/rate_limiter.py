@@ -1,4 +1,3 @@
-from curl_cffi import request
 import time
 from fastapi import HTTPException
 from functools import wraps

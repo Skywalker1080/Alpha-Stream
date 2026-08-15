@@ -1,5 +1,5 @@
 import os
-from langgraph.graph import StateGraph, START, END, MessagesState
+from langgraph.graph import StateGraph, END, MessagesState
 from langgraph.checkpoint.memory import MemorySaver 
 from langchain_core.messages import HumanMessage
 
@@ -108,13 +108,14 @@ def analyze_stock(ticker: str, thread_id: str = None):
     raw_data = fetch_prediction_data(ticker)
 
     # ---- FIX: MODEL TRAINING CASE ----
-    if raw_data == "__MODEL_TRAINING__":
+    if isinstance(raw_data, dict) and raw_data.get("status") == "training":
         return {
             "status": "training",
-            "detail": f"Model for {ticker} is being trained. Retry after a few seconds.",
+            "task_id": raw_data.get("task_id"),
+            "detail": raw_data.get("detail", f"Model for {ticker} is being trained. Retry after a few seconds."),
             "ticker": ticker_upper
         }
-    
+
     # Check for error string
     if isinstance(raw_data, str):
         # This means an error occurred (e.g. 500 or 404 text)

@@ -7,16 +7,12 @@ import shutil
 from logger.logger import get_logger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
-from fastapi.exceptions import HTTPException
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from src.utils import initialize_dirs
 import Backend.state as app_state
 from Backend.state import (
-    Redis_client, 
     REDIS_STATUS, 
-    registry, 
     SYSTEM_CPU, 
     SYSTEM_RAM, 
     SYSTEM_DISK, 
@@ -97,7 +93,7 @@ async def metrics_updater():
                     num_keys = app_state.Redis_client.dbsize()
                     REDIS_KEYS.set(num_keys)
                     REDIS_STATUS.set(1)
-                except:
+                except Exception:
                     REDIS_STATUS.set(0)
             else:
                 REDIS_STATUS.set(0)

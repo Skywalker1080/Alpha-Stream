@@ -31,8 +31,8 @@ def plot_predictions(Y: np.ndarray, preds: np.ndarray, save_path: Path, ticker: 
         save_path = Path(save_path)
         os.makedirs(save_path.parent, exist_ok=True)
         plt.figure(figsize=(12, 8))
-        features = ["Open", "High", "Low", "Close", "Volume"]
-        for i, feature in enumerate(features):
+        features = ["Open", "High", "Low", "Close", "Volume", "RSI", "MACD"]
+        for i, feature in enumerate(features[:Y.shape[1]]):
             plt.subplot(3, 2, i + 1)
             plt.plot(Y[:, i], label="Actual", alpha=0.7)
             plt.plot(preds[:, i], label="Predicted", alpha=0.7)
@@ -46,14 +46,14 @@ def plot_predictions(Y: np.ndarray, preds: np.ndarray, save_path: Path, ticker: 
         raise PrismException(e)
         
 def plot_residuals(Y: np.ndarray, preds: np.ndarray, ticker: str, save_path: Path):
-    """Plot Residuals (Actual - Predicted) for the first 5 dimensions (OHLCV)."""
+    """Plot Residuals (Actual - Predicted) for the price dimensions."""
     try:
         save_path = Path(save_path)
         os.makedirs(save_path.parent, exist_ok=True)
         residuals = Y - preds
         plt.figure(figsize=(12, 8))
-        features = ["Open", "High", "Low", "Close", "Volume"]
-        for i, feature in enumerate(features):
+        features = ["Open", "High", "Low", "Close", "Volume", "RSI", "MACD"]
+        for i, feature in enumerate(features[:Y.shape[1]]):
             plt.subplot(3, 2, i + 1)
             plt.plot(residuals[:, i], label="Residuals", alpha=0.7)
             plt.axhline(0, color='r', linestyle='--')

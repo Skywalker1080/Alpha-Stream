@@ -7,7 +7,7 @@ from src.config.pipeline_config import Config
 from src.data.data_ingestion import fetch_ohlcv
 from sklearn.preprocessing import StandardScaler
 from src.model.model_defination import PrismModel
-from src.model.evaluation import evaluate_model_temp
+from src.model.evaluation import evaluate_quick
 from src.model.provisioning import scaler_path as artifact_path
 from src.exception.exceptions import PrismException
 from logger.logger import get_logger
@@ -18,10 +18,10 @@ def train_parent() -> Dict:
     """
     'Train' parent model on BTC-USD.
     
-    With TimesFM, this is a zero-shot evaluation pipeline:
+    With TimesFM, this is a zero-shot provisioning step:
     1. Fetch OHLCV data
-    2. Load pre-trained TimesFM model
-    3. Evaluate on the dataset
+    2. Fit a scaler (serves as the "model exists" marker)
+    3. Validate on the latest window (single forward pass)
     4. Save scaler + log metrics to MLflow
     
     No actual weight training occurs — TimesFM is a foundation model.
@@ -51,9 +51,9 @@ def train_parent() -> Dict:
             # 3. Load TimesFM model
             model = PrismModel()
 
-            # 4. Evaluate
+            # 4. Validate on the latest window (fast — one forward pass)
             out_dir = config.parent_dir
-            metrics = evaluate_model_temp(model, df, scaler, out_dir, ticker=parent_ticker)
+            metrics = evaluate_quick(model, df, scaler, out_dir, ticker=parent_ticker)
 
             # 5. Save scaler for inference pipeline compat
             scaler_path = artifact_path(config, parent_ticker, "parent")
@@ -76,9 +76,10 @@ def train_child(ticker: str) -> Dict:
     """
     'Train' child model for a specific ticker.
     
-    With TimesFM, this is identical to parent evaluation since the same
-    pre-trained model is used for all tickers (no transfer learning needed).
-    We still save a scaler per ticker for the inference pipeline.
+    With TimesFM, this is a zero-shot provisioning step — the same frozen
+    foundation model is used for all tickers (no transfer learning). We only
+    fit a per-ticker scaler (the "model exists" marker) and run a quick
+    single-window validation for metrics.
     """
     config = Config()
     start = config.child_start
@@ -105,9 +106,9 @@ def train_child(ticker: str) -> Dict:
             # 3. Load TimesFM model (uses singleton — no re-load)
             model = PrismModel()
 
-            # 4. Evaluate
+            # 4. Validate on the latest window (fast — one forward pass)
             child_dir = os.path.join(workdir, ticker)
-            metrics = evaluate_model_temp(model, df, scaler, child_dir, ticker=ticker)
+            metrics = evaluate_quick(model, df, scaler, child_dir, ticker=ticker)
 
             # 5. Save scaler
             scaler_path = artifact_path(config, ticker, "child")
@@ -130,7 +131,7 @@ if __name__ == "__main__":
         logger.info("TRAINING - Starting Training Pipeline Test")
         
         # Train Parent
-        logger.info(f"TRAINING - evaluating parent model for BTC-USD")
+        logger.info("TRAINING - evaluating parent model for BTC-USD")
         parent_result = train_parent()
         logger.info(f"TRAINING - Parent Result: {parent_result}")
         
