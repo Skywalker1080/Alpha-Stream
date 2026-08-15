@@ -1,6 +1,7 @@
 networks:
   app_networks:
     driver: bridge
+
 services:
   fastapi:
     build:
@@ -9,23 +10,30 @@ services:
     container_name: fastapi
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     networks:
       - app_networks
+    # Dev bind mount: code lives on the host (hot reload), deps come from the
+    # image venv (/opt/venv). Only requirements.txt/timesfm changes need a rebuild.
     volumes:
       - .:/app
-      - ./outputs:/app/outputs
-      - ./mlruns:/app/mlruns
-      - ./mlartifacts:/app/mlartifacts
-      - ./feature_store:/app/feature_store
-    command: bash Backend/start.sh
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8000), 3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
 
   redis:
-    image: redis/redis-stack:latest
+    image: redis/redis-stack:7.4.0-v8
     container_name: redis
     ports:
       - "6379:6379"
@@ -33,16 +41,28 @@ services:
     restart: unless-stopped
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
     networks:
       - app_networks
 
   qdrant:
-    image: qdrant/qdrant:latest
+    image: qdrant/qdrant:v1.18.3
     container_name: qdrant
     ports:
       - "6333:6333"
     volumes:
       - qdrant_data:/qdrant/storage
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/6333'"]
+      interval: 15s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
     networks:
       - app_networks
 
@@ -56,12 +76,20 @@ services:
     environment:
       - API_URL=http://fastapi:8000
     depends_on:
-      - fastapi
+      fastapi:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('127.0.0.1', 8501), 3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 25s
+      retries: 3
     networks:
       - app_networks
 
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v3.13.2
     container_name: prometheus
     restart: unless-stopped
     volumes:
@@ -79,7 +107,7 @@ services:
       - app_networks
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:13.0.6
     container_name: grafana
     restart: unless-stopped
     ports:
@@ -91,7 +119,8 @@ services:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning
     depends_on:
-      - prometheus
+      prometheus:
+        condition: service_started
     networks:
       - app_networks
 

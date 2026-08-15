@@ -7,8 +7,8 @@ C
 %
 __dummy"
 __dummy_idJmlops_pipeline
-ç¨ÇË¨€ğç¨ÇË¨€ğ1"$28b59f8e-b81a-4589-bf59-3e0b75001cc1*ÇñºÌ »¦2À
-¬
+ç¨ÇË¨€ğç¨ÇË¨€ğ1"$8a7a8a2d-414a-4a14-8e76-6ff053a4f180*è–€Ô˜•ä2„
+µ
 crypto_featuresmlops_pipelineticker"
 Open"
 High"
@@ -19,9 +19,8 @@ __dummy_idJmlops_pipeline
 RSI"
 MACD2€¼àß:£event_timestamp*created_timestampZdata/crypto_data.parquetŠ1feast.infra.offline_stores.file_source.FileSource¢crypto_source’ç¨ÇËèÉ®"ç¨ÇË¨À±@b
 
-ticker
-
-ç¨ÇË¨À±ÇñºÌ˜Â“¦!
+ticker’latestÉ
+ç¨ÇË¨À±è–€Ô¨óµ!
 Êíæëúÿÿÿÿ¸«Ñ¾Ê©ÇËøÃ·½
 Ê©ÇËøÃ·½
 ‚ÊÑË€í/
@@ -67,7 +66,23 @@ __dummy_idJmlops_pipeline
 ¢íºÌ ¥«è²ñºÌøÄÌ¨
 ²ñºÌøÄÌ¨ÅñºÌ¸×Ş
 ÅñºÌ¸×Ş
-ÇñºÌàÈb´event_timestamp*created_timestampZdata/crypto_data.parquetŠ1feast.infra.offline_stores.file_source.FileSource¢crypto_sourceªmlops_pipeline’ç¨ÇËèÉ®"ç¨ÇË¨À±ŠN
+ÇñºÌàÈ
+
+ÇñºÌàÈÏ¡âÌˆê
+Ï¡âÌˆêë£âÌ™–D
+ë£âÌ™–DŞ¬âÌĞã´‰
+Ş¬âÌĞã´‰ï­âÌ˜åò·
+ï­âÌ˜åò·£°âÌè½Ø§
+£°âÌè½Ø§îºâÌà½åË
+îºâÌà½åËå¢ªÍÈ‹ş]
+å¢ªÍÈ‹ş]†ªªÍ Îï´
+†ªªÍ Îï´‘ÊªÍ ¹–Î
+‘ÊªÍ ¹–Î¨ËªÍÀ²¢í
+¨ËªÍÀ²¢íí‹€ÔˆóÊË
+í‹€ÔˆóÊË¶€ÔØîì7
+¶€ÔØîì7ï€Ô¸–Õ
+ï€Ô¸–Õ¼‘€Ô ´ÍØ
+¼‘€Ô ´ÍØç–€ÔØÂƒË0b´event_timestamp*created_timestampZdata/crypto_data.parquetŠ1feast.infra.offline_stores.file_source.FileSource¢crypto_sourceªmlops_pipeline’ç¨ÇËèÉ®"ç¨ÇË¨À±ŠN
 0
 mlops_pipelinefeature store for alpha server
 ç¨ÇËèÉ®ç¨ÇËèÉ®

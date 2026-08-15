@@ -1,8 +1,6 @@
-from attr import has
 import os
-from datetime import datetime
-from langchain_core.messages import SystemMessage, AIMessage
-from src.agents.tools import TOOL_LIST, get_crypto_news, get_stock_prediction
+from langchain_core.messages import HumanMessage, AIMessage
+from src.agents.tools import TOOL_LIST, get_crypto_news
 
 from logger.logger import get_logger
 
@@ -12,7 +10,7 @@ try:
     from langchain_ollama import ChatOllama
 
     llm = ChatOllama(
-        model="gpt-oss:20b-cloud",
+        model=os.getenv("OLLAMA_MODEL", "gemma4:31b-cloud"),
         temperature=0.5,
         base_url=os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
     ).bind_tools(TOOL_LIST)
@@ -24,6 +22,38 @@ except Exception as e:
         def invoke(self, *args, **kwargs):
             return AIMessage(content=f"LLM not available, Error: {self.error_msg}")
     llm = MockLLM(_llm_error)
+
+def _invoke_with_retry(messages, max_retries: int = 4, delay: float = 2.0):
+    """
+    Retry LLM invokes. Cloud-backed Ollama models sometimes emit a
+    done_reason='load' frame (model loaded, no content) as the only response,
+    which langchain_ollama skips, yielding an empty report. Retrying absorbs
+    this transient load race.
+    """
+    import time
+    resp = None
+    last_error = None
+    for attempt in range(max_retries):
+        try:
+            resp = llm.invoke(messages)
+            content = resp.content if hasattr(resp, "content") else str(resp)
+            if content and str(content).strip():
+                return resp
+            logger.warning(
+                f"LLM returned empty response on attempt {attempt + 1}/{max_retries}; retrying..."
+            )
+        except Exception as e:
+            last_error = e
+            logger.warning(
+                f"LLM invoke failed on attempt {attempt + 1}/{max_retries}: {e}; retrying..."
+            )
+        if attempt < max_retries - 1:
+            time.sleep(delay)
+    if resp is not None:
+        return resp
+    if last_error is not None:
+        raise last_error
+    return AIMessage(content="")
 
 def performance_analyst_node(state: dict) -> dict:
     ticker = state['ticker']
@@ -45,7 +75,7 @@ def performance_analyst_node(state: dict) -> dict:
         Give a concise 2-3 line summary of the projected trend (Bullish/Bearish/Side-ways) and the price range.
     """
 
-    resp = llm.invoke([SystemMessage(content=prompt)])
+    resp = _invoke_with_retry([HumanMessage(content=prompt)])
     content = resp.content if hasattr(resp, "content") else str(resp)
     logger.info(f"Performance Analyst Node: {ticker} - {content[:100]}")
     return {
@@ -73,7 +103,7 @@ def market_expert_node(state: dict) -> dict:
     Return a 3-5 line summary by doing sentiment analysis.
     """
 
-    resp = llm.invoke([SystemMessage(content=prompt)])
+    resp = _invoke_with_retry([HumanMessage(content=prompt)])
     content = resp.content if hasattr(resp, "content") else str(resp)
     logger.info(f"Market Expert Node: {ticker} - {content[:100]}")
     return {
@@ -104,7 +134,7 @@ def report_generator(state: dict) -> dict:
     End with: **Market Stance:** BULLISH/BEARISH/NEUTRAL | **Confidence:** High/Medium/Low
     """
 
-    response = llm.invoke([SystemMessage(content=prompt)])
+    response = _invoke_with_retry([HumanMessage(content=prompt)])
     text = response.content if hasattr(response, "content") else str(response)
     logger.info(f"Report Generator Node: {ticker} - {text[:100]}")
     
@@ -163,7 +193,7 @@ def critic_node(state: dict) -> dict:
     Output ONLY the Final Report (whether original or improved).
     """
 
-    response = llm.invoke([SystemMessage(content=prompt)])
+    response = _invoke_with_retry([HumanMessage(content=prompt)])
     final_text = response.content if hasattr(response, "content") else str(response)
     logger.info(f"DEBUG: Critic Output: {final_text[:100]}...")
 

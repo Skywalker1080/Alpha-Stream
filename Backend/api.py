@@ -1,21 +1,16 @@
-from pandas.io.common import file_exists
 from Backend.state import PREDICTION_LATENCY
 from Backend.state import PREDICTION_COUNTER
 from fastapi import APIRouter, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse
-from src.exception.exceptions import PrismException
-import sys
 import datetime
+import json
 import time
 from src.agents.graph import analyze_stock  
 import os
 from src.config.pipeline_config import Config
-from pathlib import Path
 from Backend.schema import AnalyzeRequest
 from Backend.tasks import (
-    run_training, run_blocking_fn, save_task_status,
-    get_or_set_cache, get_task_key, get_task_status_redis,
-    delete_task_status
+    run_training, run_blocking_fn,
+    get_or_set_cache, get_task_status_redis,
 )
 from src.monitoring.drift_check import check_drift
 from src.agents.memory import SemanticCache
@@ -24,7 +19,9 @@ from Backend.rate_limiter import rate_limit_decorator
 
 from src.pipeline.training_pipeline import train_child, train_parent
 from src.pipeline.inference_pipeline import predict_child, predict_parent
-from src.utils import check_model_exists
+from src.model.provisioning import (
+    ModelProvisioner, ProvisionState, PARENT_TASK_ID, child_task_id, CHILD_TASK_PREFIX
+)
 
 BASE_PATH = "outputs"
 
@@ -33,6 +30,24 @@ from logger.logger import get_logger
 logger = get_logger()
 router = APIRouter()
 config = Config()
+
+
+def _prime_prediction_cache(ticker: str):
+    get_or_set_cache(
+        f"predict_child_{ticker.lower()}",
+        lambda: predict_child(ticker),
+        expire=86400,
+    )
+
+
+provisioner = ModelProvisioner(
+    config=config,
+    task_status=get_task_status_redis,
+    start_task=run_training,
+    train_parent=train_parent,
+    train_child=train_child,
+    prime_child=_prime_prediction_cache,
+)
 
 @router.get("/")
 def home():
@@ -61,15 +76,13 @@ def analyze(req: AnalyzeRequest):
 @rate_limit_decorator(limit=3, window_sec=60, key_prefix="train_parent")
 async def train_parent_model():
     """Start parent model training"""
-    task_id = "parent_training" # later implement task_id generation 
-    
-    if check_model_exists(model_type="parent"):
+    task_id = PARENT_TASK_ID
+
+    result = await provisioner.ensure(config.parent_ticker, "parent")
+    if result.state == ProvisionState.PROVISIONED:
         return {"status": "completed", "task_id": task_id, "detail": "Parent model already exists"}
-
-    if get_task_status_redis(task_id) and get_task_status_redis(task_id).get("status") == "running":
+    if result.state == ProvisionState.TRAINING:
         return {"status": "already running", "task_id": task_id}
-
-    await run_training(task_id, train_parent)
     return {"status": "started", "task_id": task_id}
 
 @router.post("/train-child")
@@ -82,31 +95,17 @@ async def train_child_model(request: Request):
     if not ticker:
         raise HTTPException(status_code=400, detail="Ticker is required")
 
-    task_id = f"train_child_{ticker}"
+    task_id = child_task_id(ticker)
+    result = await provisioner.ensure(ticker, "child")
 
-    parent_path = Path(config.parent_dir) / f"{config.parent_ticker}_parent_model.pt"
-
-    if not parent_path.exists():
-        logger.warning("Parent Model Missing, initiating parent training")
-        parent_status = get_task_status_redis("parent_training")
-        if not parent_status or parent_status.get("status") != "completed":
-            await run_training("parent_training", train_parent)
-            parent_status = get_task_status_redis("parent_training")
-            if parent_status and parent_status.get("status") == "running":
-                return {"status": "running_parent", "task_id": "parent_training", "detail": "Parent model is currently training"}
-
-    if check_model_exists(ticker, "child"):
+    if result.state == ProvisionState.PROVISIONED:
         return {"status": "completed", "task_id": task_id, "detail": "Child model already exists"}
-
-    curr_status = get_task_status_redis(task_id)
-    if curr_status and curr_status.get("status") == "running":
+    if result.state == ProvisionState.TRAINING and result.task_id == PARENT_TASK_ID:
+        return {"status": "running_parent", "task_id": PARENT_TASK_ID, "detail": "Parent model is currently training"}
+    if result.state == ProvisionState.TRAINING:
         return {"status": "running", "task_id": task_id, "detail": "Training already in progress"}
-
-    def chain_predict():
-        logger.info(f"Auto-predicting for {ticker} after training...")
-        get_or_set_cache(f"predict_child_{ticker.lower()}", lambda: predict_child(ticker), expire=86400)
-
-    await run_training(task_id, train_child, ticker, chain_fn=chain_predict)
+    if result.task_id == PARENT_TASK_ID:
+        return {"status": "running_parent", "task_id": PARENT_TASK_ID, "detail": "Parent model is currently training"}
     return {"status": "started", "task_id": task_id}
     
 # Prediciton Endpoints
@@ -133,10 +132,19 @@ async def predict_child_endpoint(request: Request, response: Response):
     ticker = data.get("ticker", "").strip().upper()
     if not ticker:
         raise HTTPException(status_code=400, detail="Ticker is required")
-    
-    task_id = ticker.lower()
+
     PREDICTION_COUNTER.labels(type="child").inc()
     start_time = time.time()
+
+    result = await provisioner.ensure(ticker, "child")
+    if result.state != ProvisionState.PROVISIONED:
+        response.status_code = 202
+        if result.task_id == PARENT_TASK_ID:
+            detail = "Parent model missing. Training parent first."
+        else:
+            detail = "Training in progress. Please retry later."
+        return {"status": "training", "task_id": result.task_id, "detail": detail}
+
     try:
         def get_preds():
             return get_or_set_cache(f"predict_child_{ticker.lower()}", lambda: predict_child(ticker), expire=86400)
@@ -144,36 +152,9 @@ async def predict_child_endpoint(request: Request, response: Response):
         preds, _ = await run_blocking_fn(get_preds)
         PREDICTION_LATENCY.labels(type="child").observe(time.time() - start_time)
         return {"result": preds}
-    except (FileNotFoundError, PrismException) as e:
-        if "Missing" in str(e) or "not found" in str(e):
-            logger.info(f"Model missing for {ticker}, triggering auto-training.")
-
-            # Check if Parent Model exists
-            if not check_model_exists("parent", "parent"):
-                logger.warning("Parent model missing. Triggering parent training first.")
-                parent_status = get_task_status_redis("parent_training")
-                if not parent_status or parent_status.get("status") != "completed":
-                    await run_training("parent_training", train_parent)
-                    response.status_code = 202
-                    return {"status": "training", "detail": "Parent model missing. Training parent first.", "task_id": "parent_training"}
-
-            status = get_task_status_redis(task_id)
-            if status and status.get("status") == "running":
-                 response.status_code = 202
-                 return {"status": "training", "detail": "Training in progress. Please retry later.", "task_id": task_id}
-
-            def chain_predict():
-                # Chain prediction and caching after training
-                logger.info(f"Auto-predicting for {ticker} after auto-training...")
-                get_or_set_cache(f"predict_child_{ticker.lower()}", lambda: predict_child(ticker), expire=86400)
-
-            await run_training(task_id, train_child, ticker, chain_fn=chain_predict)
-            response.status_code = 202
-            return {"status": "training", "detail": "Model missing. Training child model...", "task_id": task_id}
-        
-        raise HTTPException(500, str(e))
     except Exception as e:
-        raise HTTPException(500, str(e))
+        logger.error(f"Child prediction failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # System monitoring Endpoints
 
@@ -182,13 +163,17 @@ async def get_task_status(task_id: str):
     """Check the status of the task"""
     task = task_id.lower()
     if task == "parent":
-        task == "parent_training"
+        task = PARENT_TASK_ID
 
     status = get_task_status_redis(task)
 
-    ticker_for_disk = "parent" if task == "parent_training" else task.upper()
-    model_type = "parent" if task == "parent_training" else "child"
-    file_exists = check_model_exists(ticker_for_disk, model_type)
+    if task == PARENT_TASK_ID:
+        ticker_for_disk, model_type = config.parent_ticker, "parent"
+    elif task.startswith(CHILD_TASK_PREFIX):
+        ticker_for_disk, model_type = task[len(CHILD_TASK_PREFIX):].upper(), "child"
+    else:
+        ticker_for_disk, model_type = task.upper(), "child"
+    file_exists = provisioner.is_provisioned(ticker_for_disk, model_type)
 
     if not status:
         if file_exists:
@@ -201,11 +186,11 @@ async def get_task_status(task_id: str):
     response = status.copy()
     if response.get("status") == "running" and "start_time" in response:
         try:
-            start_dt = datetime.strptime(response["start_time"], "%Y-%m-%d %H:%M:%S")
+            start_dt = datetime.datetime.strptime(response["start_time"], "%Y-%m-%d %H:%M:%S")
             response["elapsed_seconds"] = int((datetime.datetime.now() - start_dt).total_seconds())
         except Exception:
             pass
-    
+
     response.pop("start_time", None)
     return response
 

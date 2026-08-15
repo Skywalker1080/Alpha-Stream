@@ -15,7 +15,7 @@ def predict_parent():
         logger.info("INFERENCE: Starting parent inference pipeline")
         ticker = config.parent_ticker
         
-        logger.info(f"INFERENCE: Loading model and scaler for {ticker}")
+        logger.info(f"INFERENCE: Loading TimesFM model for {ticker}")
         model, scaler = safe_load_local_model(ticker, "parent")
         
         logger.info(f"INFERENCE: Fetching OHLCV data for {ticker}")
@@ -68,7 +68,7 @@ def predict_child(ticker: str):
     try:
         logger.info(f"INFERENCE: Starting child inference pipeline for {ticker}")
         
-        logger.info(f"INFERENCE: Loading model and scaler for {ticker}")
+        logger.info(f"INFERENCE: Loading TimesFM model for {ticker}")
         model, scaler = safe_load_local_model(ticker=ticker, model_type="child")
         
         logger.info(f"INFERENCE: Fetching OHLCV data for {ticker}")
@@ -132,4 +132,3 @@ if __name__=="__main__":
         print(f"Error: {e}")
         import traceback
         traceback.print_exc()
-

@@ -1,0 +1,42 @@
+# Version control
+.git
+.gitignore
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+.venv
+.ruff_cache
+.env
+*.env
+*.egg-info
+
+# Data and Models
+model/
+outputs/
+mlruns/
+mlartifacts/
+feature_store/data/
+*.db
+*.sqlite
+
+# Logs
+logs/
+
+# Notebooks
+notebooks/
+
+# Repo areas not needed by the backend image
+frontend/
+docs/
+k8s/
+grafana/
+SOL-USD/
+
+# Dev / tooling cruft
+.agents/
+.vscode/
+.idea/
+test.py
+skills-lock.json

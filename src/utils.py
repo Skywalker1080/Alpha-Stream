@@ -1,17 +1,13 @@
 import numpy as np
 from pathlib import Path
-import torch
-import joblib
 import os
 import json
 import matplotlib.pyplot as plt
-from sklearn.preprocessing._data import StandardScaler
 from src.exception.exceptions import PrismException
 from src.config.pipeline_config import Config
 from logger.logger import get_logger
 
 logger = get_logger()
-config = Config()
 
 
 def save_metrics(metrics: dict, out_dir: Path, ticker: str):
@@ -69,37 +65,6 @@ def plot_residuals(Y: np.ndarray, preds: np.ndarray, ticker: str, save_path: Pat
     except PrismException as e:
         logger.exception(f"Failed to plot residuals for {ticker}: {e}")
         raise PrismException(e)
-
-def save_model(model, scaler: StandardScaler, path: Path, ticker: str = None, model_type="parent"):
-    try:
-        os.makedirs(path, exist_ok=True)
-
-        torch_path = os.path.join(path, "model.pt")
-        scaler_filename = "parent_scaler.pkl" if model_type == "parent" else f"{ticker}_child_scaler.pkl"
-        scaler_path = os.path.join(path, scaler_filename)
-
-        # Save locally
-        torch.save(model.state_dict(), torch_path)
-        joblib.dump(scaler, scaler_path)
-        logger.info(f"Model saved to {path} for {model_type.upper()} model")
-
-        # Log to MLflow
-        mlflow.log_artifact(torch_path, "model")
-        mlflow.log_artifact(scaler_path, "model")
-        logger.info(f"Model artifacts logged to MLflow for {model_type.upper()} model")
-
-        return torch_path, scaler_path
-    except Exception as e:
-        logger.error(f"Failed to save model: {e}")
-        raise PrismException(f"Failed to save model: {e}")
-
-def check_model_exists(ticker: str = None, model_type: str ="child"):
-    """Check if model exists locally"""
-    if model_type == "parent":
-        path = Path(config.parent_dir) / f"{config.parent_ticker}_parent_model.pt"
-    else:
-        path = Path(config.child_dir) / ticker / f"{ticker}_child_model.pt"
-    return path.exists()
 
 def initialize_dirs():
     """Initialize output directories."""

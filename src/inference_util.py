@@ -1,13 +1,9 @@
 import numpy as np
 import pandas as pd
-import torch
-import pickle
 import sys
-import joblib
-from pathlib import Path
-from feast import FeatureStore
 from sklearn.preprocessing import StandardScaler
 from src.config.pipeline_config import Config
+from src.model.provisioning import scaler_path as artifact_path
 from typing import Dict
 from src.exception.exceptions import PrismException
 from src.model.model_defination import PrismModel
@@ -16,28 +12,39 @@ from logger.logger import get_logger
 logger = get_logger()
 config = Config()
 
-def predict_one_step(model, df: pd.DataFrame, scaler: StandardScaler, ticker: str) -> Dict:
+
+def predict_one_step(model: PrismModel, df: pd.DataFrame, scaler: StandardScaler, ticker: str) -> Dict:
+    """
+    Generate a multi-step forecast using the TimesFM model.
+
+    Args:
+        model: PrismModel wrapping TimesFM 2.5
+        df: DataFrame with columns [date, Open, High, Low, Close, Volume, RSI, MACD]
+        scaler: StandardScaler (kept for API compat — TimesFM self-normalizes)
+        ticker: The ticker symbol
+
+    Returns:
+        Dict with forecast results compatible with the existing API contract.
+    """
     try:
         logger.info(f"INFERENCE - Starting one-step prediction for ticker: {ticker}")
-        
-        vals = scaler.transform(df[config.features]).astype('float32')
-        logger.debug(f"INFERENCE - Input data transformed. Data shape: {vals.shape}")
-        
-        X = vals[-config.context_len:].reshape(1, config.context_len, config.input_size)
-        logger.debug(f"INFERENCE - Prepared input tensor 'X' with shape: {X.shape}")
-        
-        with torch.no_grad():
-            X_tensor = torch.tensor(X, dtype=torch.float32).to(config.device)
-            preds = model(X_tensor).cpu().numpy()[0]
-            logger.debug(f"INFERENCE - Model inference completed. Raw predictions shape: {preds.shape}")
 
-        # inverse transform preds
-        pred_inv = scaler.inverse_transform(preds.reshape(-1, config.input_size))[:, :5]
-        logger.debug("INFERENCE - Inverse transformation of predictions successful.")
+        # Use only the last context_len rows for prediction
+        context_df = df.tail(config.context_len).copy()
+        logger.debug(f"INFERENCE - Using last {len(context_df)} rows as context")
+
+        # Predict using TimesFM channel-independent forecasting
+        pred_inv = model.predict(context_df, scaler=scaler, horizon=config.pred_len)
+        logger.debug(f"INFERENCE - Model inference completed. Predictions shape: {pred_inv.shape}")
+
+        # pred_inv shape: (pred_len, num_features)
+        # Features order: [Open, High, Low, Close, Volume, RSI, MACD]
+        # We only expose OHLCV (first 5) in the response
 
         # formatting dates
         last_day = df['date'].iloc[-1]
-        next_days = pd.bdate_range(last_day + pd.Timedelta(days=1), periods=config.pred_len)
+        # Crypto trades 24/7/365, so forecast on calendar days (not business days).
+        next_days = pd.date_range(last_day + pd.Timedelta(days=1), periods=config.pred_len)
         logger.info(f"INFERENCE - Generated {len(next_days)} forecast points starting from {last_day}")
 
         forecast = []
@@ -54,7 +61,7 @@ def predict_one_step(model, df: pd.DataFrame, scaler: StandardScaler, ticker: st
         logger.info(f"INFERENCE - Prediction for {ticker} completed successfully.")
         return {
             "ticker": ticker,
-            "last_date": str(last_day.date()),
+            "last_date": str(last_day.date()) if hasattr(last_day, 'date') else str(last_day),
             "future_window_days": config.pred_len,
             "next_business_days": [str(d.date()) for d in next_days],
             "predictions": {
@@ -70,50 +77,44 @@ def predict_one_step(model, df: pd.DataFrame, scaler: StandardScaler, ticker: st
         logger.error(f"INFERENCE - Error in predict_one_step for {ticker}: {str(e)}")
         raise PrismException(f"INFERENCE - Failed to predict one step for {ticker}", str(e))
 
-def safe_load_scaler(path: str):
-    """Safely loading scaler via pickle -> fallback to joblib"""
-    try:
-        with open(path, "rb") as f:
-            return pickle.load(f)
-    except Exception:
-        try:
-            return joblib.load(path)
-        except Exception as e:
-            raise PrismException(f"Failed to load model from {path}: {e}", sys)
 
-def safe_load_local_model(ticker: str, model_type: str):
-    """Safely load Pytorch model and scaler locally"""
-    model_path = None
+def safe_load_local_model(ticker: str = None, model_type: str = "parent") -> tuple:
+    """
+    Load the TimesFM PrismModel.
+
+    TimesFM uses a single pre-trained model (no separate parent/child weights),
+    so model_type and ticker are kept for API compatibility but don't affect
+    loading. The scaler is returned as None since TimesFM self-normalizes.
+    """
     try:
-        logger.info(f"UTILS - safely loading Pytorch model and scaler")
-        if model_type == "parent":
-            base_dir = config.parent_dir
-            model_path = Path(base_dir) / f"{config.parent_ticker}_parent_model.pt"
-            scaler_path = Path(base_dir) / f"{config.parent_ticker}_parent_scaler.pkl"
-        else:
-            # Child models are stored in outputs/{ticker}/...
-            base_dir = Path(config.child_dir) / ticker 
-            model_path = base_dir / f"{ticker}_child_model.pt"
-            scaler_path = base_dir / f"{ticker}_child_scaler.pkl"
-        
-        if not Path(model_path).exists():
-            logger.error(f"Model not found at {model_path}")
-            raise FileNotFoundError(f"Model not found at {model_path}")
-        if not Path(scaler_path).exists():
-            logger.error(f"Scaler not found at {scaler_path}")
-            raise FileNotFoundError(f"Scaler not found at {scaler_path}")
-        
-        model = PrismModel().to(config.device)
-        model.load_state_dict(torch.load(model_path, map_location=config.device))
-        model.eval()
-        scaler = safe_load_scaler(scaler_path)
+        logger.info(f"UTILS - Loading TimesFM model (model_type={model_type}, ticker={ticker})")
+        model = PrismModel()
+
+        # Return None scaler — TimesFM handles normalization internally
+        # We still need to return a 2-tuple to match the existing API
+        # If a scaler was previously saved, try to load it for backward compat
+        scaler = _try_load_scaler(ticker, model_type)
+
         return model, scaler
     except Exception as e:
-        msg = f"Failed to load model from {model_path}: {e}" if model_path else f"Failed to load model: {e}"
-        raise PrismException(msg, sys)
+        raise PrismException(f"Failed to load TimesFM model: {e}", sys)
+
+
+def _try_load_scaler(ticker: str, model_type: str):
+    """Try to load a previously saved scaler, return None if not found."""
+    import joblib
+    try:
+        scaler_path = artifact_path(config, ticker, model_type)
+        if scaler_path.exists():
+            return joblib.load(scaler_path)
+    except Exception as e:
+        logger.warning(f"Could not load scaler from {scaler_path}: {e}")
+    return None
+
 
 def get_feature_Store():
     try:
+        from feast import FeatureStore
         logger.info("Fetching feature store")
         return FeatureStore(repo_path="feature_store")
     except Exception as e:
