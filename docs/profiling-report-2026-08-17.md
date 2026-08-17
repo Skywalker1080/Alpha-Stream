@@ -84,6 +84,17 @@ ncalls  tottime  cumtime  function
 - Threads 8 vs 16 are effectively tied on latency (2.40–2.46 s serial); the branch pins physical cores (8) as the safe default to keep oversubscription headroom under heavier concurrency.
 - Caveat: single run per config; the baseline effect is large enough (≈5.6× serial) that variance cannot reverse the conclusion.
 
+### Follow-up experiment: torch.compile (2026-08-17)
+
+Compiled the underlying TimesFM transformer with `torch.compile` (default mode, CPU/AVX2, 8 threads) and re-ran the same 5-predict benchmark:
+
+| Path | mean | median | p95 |
+|---|---|---|---|
+| baseline (eager, fp32) | 2.459 s | 2.440 s | 2.501 s |
+| torch.compile | 2.393 s | 2.398 s | 2.410 s |
+
+**Result:** 1.03× speedup — negligible. The forecast GEMM is memory-bandwidth-bound on this AVX2 host; inductor has nothing to fuse/win on a 200M transformer's dense linears. Combined with the one-time ~2.4 s JIT and added maintenance, **torch.compile is not worth adopting** here. This closes the CPU-side optimization space: worker consolidation was the real fix; the remaining ~2.5 s is a hardware floor (GPU or AVX512/bf16 hardware would be required to move it).
+
 ## Follow-ups / open questions
 
 - ✅ Worker consolidation measured (see experiment above) — pending decision to merge `experiment/single-worker-torch-cores` into `main`.

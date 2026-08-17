@@ -77,6 +77,7 @@ class SemanticCache:
             collection_name=self.collection_name,
             points=[point],
         )
+        logger.info(f"CACHE QDRANT SAVE OK: ticker={ticker} point_id={point.id}")
 
     def recall(self, query_embedding: list, ticker: str, limit: int = 3):
         """
@@ -106,6 +107,12 @@ class SemanticCache:
             with_payload=True,
             query_filter=ticker_filter,
         )
+        logger.info(f"CACHE QDRANT RECALL: {len(result.points)} points, ticker={ticker}")
+        for p in result.points:
+            logger.info(
+                f"CACHE QDRANT RECALL: id={p.id} score={p.score:.4f} ticker={p.payload.get('ticker')} created={p.payload.get('created_at_ts')}"
+            )
+        return result.points
 
     def clear_cache(self, delete_collection: bool = False):
         """Reset the cache by deleting all points or the collection itself."""

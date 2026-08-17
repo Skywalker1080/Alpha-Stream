@@ -11,6 +11,9 @@ from src.agents.nodes import (
 )
 
 from src.agents.memory import SemanticCache
+from logger.logger import get_logger
+
+logger = get_logger()
 
 try:
     from langchain_ollama import OllamaEmbeddings
@@ -69,12 +72,17 @@ def analyze_stock(ticker: str, thread_id: str = None):
             # Create query embedding
             query_text = f"Analysis report for {ticker_upper}"
             query_vec = embedder.embed_query(query_text)
+            logger.info(f"CACHE CHECK: embedding query for {ticker_upper} (vec len={len(query_vec)})")
             
             # Search (fetch more to sort by time)
             hits = mem.recall(query_vec, ticker=ticker_upper, limit=5)
+            logger.info(f"CACHE CHECK: recall returned {len(hits)} hits for {ticker_upper}")
+            for h in hits:
+                logger.info(f"CACHE CHECK: hit score={h.score:.4f} ticker={h.payload.get('ticker')} created={h.payload.get('created_at_ts')}")
             
             # Filter for high score
             valid_hits = [h for h in hits if h.score > 0.95]
+            logger.info(f"CACHE CHECK: {len(valid_hits)} hits above 0.95 threshold")
             
             if valid_hits:
                 # Sort by created_at_ts descending to get newest
@@ -85,7 +93,7 @@ def analyze_stock(ticker: str, thread_id: str = None):
                 cached_payload = best_hit.payload
                 # Check if it's for the same ticker to be safe (semantic search might be fuzzy)
                 if cached_payload.get("ticker") == ticker_upper:
-                    print(f"✅ Semantic Cache HIT for {ticker_upper}")
+                    logger.info(f"CACHE HIT (qdrant semantic): {ticker_upper}")
                     return {
                         "final_report": cached_payload.get("summary"),
                         "recommendation": cached_payload.get("recommendation", "Neutral"),
@@ -94,7 +102,7 @@ def analyze_stock(ticker: str, thread_id: str = None):
                         "predictions": cached_payload.get("predictions", {})
                     }
         except Exception as e:
-            print(f"Semantic Cache Error: {e}")
+            logger.warning(f"CACHE ERROR (semantic cache unavailable): {e}")
             # If error occurred, query_vec might be None or partial, but we proceed to fetch fresh data
 
     
@@ -194,11 +202,11 @@ def analyze_stock(ticker: str, thread_id: str = None):
                     last_price=last_price,
                     predictions=preds_data if isinstance(preds_data, dict) else {}
                 )
-                print(f"Saved to Qdrant: {ticker_upper}")
+                logger.info(f"CACHE SAVE OK (qdrant): {ticker_upper}")
             else:
-                print("Warning: Could not save to cache because query_vec generation failed.")
+                logger.warning("CACHE SAVE SKIPPED: query_vec generation failed")
         except Exception as e:
-            print(f"Failed to save cache: {e}")
+            logger.error(f"CACHE SAVE FAILED (qdrant): {e}")
     
     return result
 

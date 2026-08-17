@@ -21,26 +21,52 @@ def _redis():
 def refresh_system_metrics():
     pass # in monitoring run
 
+def _json_default(o):
+    """JSON serializer fallback for pandas/numpy types in cached payloads."""
+    import numpy as np
+    if hasattr(o, "isoformat"):  # pandas Timestamp / datetime
+        return o.isoformat()
+    if isinstance(o, np.ndarray):
+        return o.tolist()
+    if isinstance(o, (np.integer,)):
+        return int(o)
+    if isinstance(o, (np.floating,)):
+        return float(o)
+    if isinstance(o, (np.bool_,)):
+        return bool(o)
+    return str(o)
+
 def get_or_set_cache(key: str, compute_fn, expire: int = 86400):
     """Helper to check Redis cache or compute and cache."""
     refresh_system_metrics()
-    try:
-        redis = _redis()
-        if redis:
+    redis = _redis()
+    if redis:
+        try:
             val = redis.get(key)
             if val:
+                logger.info(f"CACHE HIT (redis): {key}")
                 CACHE_HIT.labels(key).inc()
                 return json.loads(val), True
+            logger.info(f"CACHE MISS (redis): {key}")
+        except Exception as e:
+            logger.warning(f"CACHE READ ERROR: {key}: {str(e)}")
+    else:
+        logger.warning(f"CACHE NO-REDIS (redis client unavailable): {key}")
 
+    try:
         result = compute_fn()
-        
-        if redis:
-            redis.set(key, json.dumps(result), ex=expire)
-            CACHE_MISS.labels(key).inc()
-        return result, False
     except Exception as e:
-        logger.error(f"Failed to fetch cache from Redis: {str(e)}")
-        return compute_fn(), False
+        logger.error(f"CACHE COMPUTE FAILED: {key}: {str(e)}")
+        raise
+
+    if redis:
+        try:
+            redis.set(key, json.dumps(result, default=_json_default), ex=expire)
+            logger.info(f"CACHE SET OK: {key} (ttl={expire}s)")
+            CACHE_MISS.labels(key).inc()
+        except Exception as e:
+            logger.error(f"CACHE SET FAILED: {key}: {str(e)} -> result will NOT be cached")
+    return result, False
 
 # Task status tracking Redis
 
