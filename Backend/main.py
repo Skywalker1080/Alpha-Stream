@@ -4,6 +4,7 @@ import redis
 import uvicorn
 import psutil
 import shutil
+import urllib.request
 from logger.logger import get_logger
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,10 +13,12 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from src.utils import initialize_dirs
 import Backend.state as app_state
 from Backend.state import (
-    REDIS_STATUS, 
-    SYSTEM_CPU, 
-    SYSTEM_RAM, 
-    SYSTEM_DISK, 
+    REDIS_STATUS,
+    QDRANT_STATUS,
+    OLLAMA_STATUS,
+    SYSTEM_CPU,
+    SYSTEM_RAM,
+    SYSTEM_DISK,
     REDIS_KEYS
 )
 from Backend.api import router
@@ -41,7 +44,20 @@ instrumentator = Instrumentator(
     excluded_handlers=[".*admin.*", "/metrics"],
     env_var_name="ENABLE_METRICS",
 )
-instrumentator.instrument(app).expose(app, endpoint="/metrics")
+instrumentator.instrument(app)
+
+from prometheus_client import generate_latest
+from starlette.responses import Response as StarletteResponse
+
+@app.get("/metrics")
+async def metrics_route():
+    try:
+        data = generate_latest()
+        return StarletteResponse(content=data, media_type="text/plain; version=1.0.0; charset=utf-8")
+    except Exception as e:
+        logger.error(f"/metrics generate_latest error: {type(e).__name__}: {e}")
+        return StarletteResponse(content=b"", media_type="text/plain; version=1.0.0; charset=utf-8", status_code=500)
+
 
 @app.on_event("startup")
 async def startup():
@@ -72,8 +88,18 @@ async def startup():
     # Start background task for metrics
     asyncio.create_task(metrics_updater())
 
+def _http_ok(url: str, timeout: float = 2.0) -> bool:
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as resp:
+            return 200 <= resp.status < 400
+    except Exception:
+        return False
+
+
 async def metrics_updater():
     """Background task to update system and redis metrics every 15 seconds."""
+    qdrant_host = os.getenv("QDRANT_HOST", "qdrant")
+    ollama_base = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
     while True:
         try:
             # CPU
@@ -86,6 +112,10 @@ async def metrics_updater():
             # Disk
             total, used, free = shutil.disk_usage("/")
             SYSTEM_DISK.set(used / (1024 * 1024)) # MB
+
+            # Qdrant / Ollama uptime
+            QDRANT_STATUS.set(1 if await asyncio.to_thread(_http_ok, f"http://{qdrant_host}:6333/") else 0)
+            OLLAMA_STATUS.set(1 if await asyncio.to_thread(_http_ok, f"{ollama_base}/api/tags") else 0)
             
             # Redis Keys
             if app_state.Redis_client:

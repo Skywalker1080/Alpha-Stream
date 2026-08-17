@@ -122,11 +122,11 @@ async def train_child_model(request: Request):
 @rate_limit_decorator(limit=3, window_sec=60, key_prefix="predict_parent")
 async def predict_parent_endpoint():
     """Get parent predictions"""
-    PREDICTION_COUNTER.labels(type="parent").inc()
+    PREDICTION_COUNTER.labels(type="parent", ticker=Config.parent_ticker).inc()
     start_time = time.time()
     try:
         result = await run_blocking_fn(predict_parent)
-        PREDICTION_LATENCY.labels(type="parent").observe(time.time() - start_time)
+        PREDICTION_LATENCY.labels(type="parent", ticker=Config.parent_ticker).observe(time.time() - start_time)
         return {"result": result}
     except Exception as e:
         logger.error(f"Parent prediction failed: {str(e)}")
@@ -141,7 +141,7 @@ async def predict_child_endpoint(request: Request, response: Response):
     if not ticker:
         raise HTTPException(status_code=400, detail="Ticker is required")
 
-    PREDICTION_COUNTER.labels(type="child").inc()
+    PREDICTION_COUNTER.labels(type="child", ticker=ticker).inc()
     start_time = time.time()
 
     result = await provisioner.ensure(ticker, "child")
@@ -158,7 +158,7 @@ async def predict_child_endpoint(request: Request, response: Response):
             return get_or_set_cache(f"predict_child_{ticker.lower()}", lambda: predict_child(ticker), expire=86400)
 
         preds, _ = await run_blocking_fn(get_preds)
-        PREDICTION_LATENCY.labels(type="child").observe(time.time() - start_time)
+        PREDICTION_LATENCY.labels(type="child", ticker=ticker).observe(time.time() - start_time)
         return {"result": preds}
     except Exception as e:
         logger.error(f"Child prediction failed: {str(e)}")

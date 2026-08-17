@@ -1,0 +1,273 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: crypto-prism
+    folder: Crypto Prism
+    interval: 1m
+    rules:
+      - uid: cp-backend-down
+        title: FastAPI backend down
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            model:
+              expr: up{job="fastapi"}
+              instant: true
+              refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: lt
+                    params:
+                      - 1
+                  type: threshold
+              refId: C
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: FastAPI backend is down or not being scraped
+
+      - uid: cp-redis-down
+        title: Redis down
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            model:
+              expr: redis_up
+              instant: true
+              refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: lt
+                    params:
+                      - 1
+                  type: threshold
+              refId: C
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Redis is down
+
+      - uid: cp-qdrant-down
+        title: Qdrant down
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            model:
+              expr: qdrant_up
+              instant: true
+              refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: lt
+                    params:
+                      - 1
+                  type: threshold
+              refId: C
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Qdrant is down
+
+      - uid: cp-ollama-down
+        title: Ollama down
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            model:
+              expr: ollama_up
+              instant: true
+              refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: lt
+                    params:
+                      - 1
+                  type: threshold
+              refId: C
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Ollama is down (MockLLM fallback is being used)
+
+      - uid: cp-analyze-error-rate
+        title: /analyze error rate high
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            model:
+              expr: sum(rate(agent_analysis_errors_total[5m])) / (sum(rate(agent_analysis_total[5m])) + 1e-9)
+              instant: true
+              refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params:
+                      - 0.2
+                  type: threshold
+              refId: C
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: /analyze error rate is above 20% for 5 minutes
+
+      - uid: cp-llm-error-rate
+        title: LLM error rate high
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            model:
+              expr: sum(rate(llm_calls_total{outcome="error"}[5m])) / (sum(rate(llm_calls_total[5m])) + 1e-9)
+              instant: true
+              refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params:
+                      - 0.2
+                  type: threshold
+              refId: C
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: LLM calls have an error rate above 20% for 5 minutes
+
+      - uid: cp-predict-cache-miss
+        title: Predict result-cache miss rate high
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            model:
+              expr: 1 - (sum(rate(redis_cache_hit_total[5m])) / (sum(rate(redis_cache_hit_total[5m])) + sum(rate(redis_cache_miss_total[5m])) + 1e-9))
+              instant: true
+              refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+          - refId: B
+            datasourceUid: __expr__
+            model:
+              type: reduce
+              expression: A
+              reducer: last
+              refId: B
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: B
+              conditions:
+                - evaluator:
+                    type: gt
+                    params:
+                      - 0.9
+                  type: threshold
+              refId: C
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Predict result-cache miss rate is above 90% for 10 minutes

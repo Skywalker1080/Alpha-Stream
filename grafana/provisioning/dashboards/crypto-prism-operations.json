@@ -40,8 +40,8 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum by (le, type) (rate(prediction_latency_seconds_bucket[5m])))",
-          "legendFormat": "{{type}} p95",
+          "expr": "histogram_quantile(0.95, sum by (le, type, ticker) (rate(prediction_latency_seconds_bucket[5m])))",
+          "legendFormat": "{{type}}/{{ticker}} p95",
           "refId": "A"
         }
       ],
@@ -72,8 +72,8 @@
       },
       "targets": [
         {
-          "expr": "sum by (type) (rate(prediction_total[5m]))",
-          "legendFormat": "{{type}}",
+          "expr": "sum by (type, ticker) (rate(prediction_total[5m]))",
+          "legendFormat": "{{type}}/{{ticker}}",
           "refId": "A"
         }
       ],
@@ -467,6 +467,11 @@
           "expr": "system_disk_used_mb",
           "legendFormat": "disk MB",
           "refId": "C"
+        },
+        {
+          "expr": "redis_keys_total",
+          "legendFormat": "redis keys",
+          "refId": "D"
         }
       ],
       "title": "System resources",
@@ -497,16 +502,21 @@
       "targets": [
         {
           "expr": "redis_up",
-          "legendFormat": "redis up",
+          "legendFormat": "redis",
           "refId": "A"
         },
         {
-          "expr": "redis_keys_total",
-          "legendFormat": "redis keys",
+          "expr": "qdrant_up",
+          "legendFormat": "qdrant",
           "refId": "B"
+        },
+        {
+          "expr": "ollama_up",
+          "legendFormat": "ollama",
+          "refId": "C"
         }
       ],
-      "title": "Redis status",
+      "title": "Service status (1=up)",
       "type": "timeseries"
     },
     {
@@ -539,6 +549,110 @@
         }
       ],
       "title": "HTTP errors by endpoint",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 51 },
+      "id": 103,
+      "title": "Training",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "max": 2,
+          "min": 0,
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 52 },
+      "id": 16,
+      "options": {
+        "legend": { "calcs": ["last"], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "training_status",
+          "legendFormat": "training status (0=idle 1=running 2=completed)",
+          "refId": "A"
+        }
+      ],
+      "title": "Training status",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 52 },
+      "id": 17,
+      "options": {
+        "legend": { "calcs": ["last"], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(training_duration_seconds_bucket[5m]))",
+          "legendFormat": "training p95",
+          "refId": "A"
+        }
+      ],
+      "title": "Training duration p95",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": true
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 52 },
+      "id": 18,
+      "options": {
+        "legend": { "calcs": ["last"], "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "targets": [
+        {
+          "expr": "training_mse_last",
+          "legendFormat": "last mse",
+          "refId": "A"
+        }
+      ],
+      "title": "Training MSE (last)",
       "type": "timeseries"
     }
   ],

@@ -117,12 +117,12 @@ async def run_training_worker(task_id: str, fn, *args, chain_fn=None):
             logger.info(f"Task {task_id}: Chained Task Complete")
         
         duration = time.time() - start_time
-        TRAINING_DURATION.labels(task_id).observe(duration)
+        TRAINING_DURATION.observe(duration)
 
         status_data = {"status": "completed", "result": result, "completed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
         save_task_status(task_id, status_data, ttl=3600)
 
-        TRAINING_STATUS.labels(task_id).set(2)
+        TRAINING_STATUS.set(2)
 
         if isinstance(result, dict) and "mse" in result:
             TRAINING_MSE.set(result["mse"])
@@ -130,7 +130,7 @@ async def run_training_worker(task_id: str, fn, *args, chain_fn=None):
         status_data = {"status": "failed", "error": str(e), "failed_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
         save_task_status(task_id, status_data, ttl=3600)
 
-        TRAINING_STATUS.labels(task_id).set(0)
+        TRAINING_STATUS.set(0)
         logger.error(f"Training failed for {task_id}: {str(e)}")
 
 async def run_blocking_fn(fn, *args):
@@ -149,7 +149,7 @@ async def run_training(task_id: str, fn, *args, chain_fn=None):
     status_data = {"status": "running", "start_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
     save_task_status(task_id, status_data, ttl=7200)
 
-    TRAINING_STATUS.labels(task_id).set(1)
+    TRAINING_STATUS.set(1)
 
     asyncio.create_task(run_training_worker(task_id, fn, *args, chain_fn=chain_fn))
 

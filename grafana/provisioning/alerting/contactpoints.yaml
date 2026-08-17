@@ -1,0 +1,12 @@
+apiVersion: 1
+
+contactPoints:
+  - orgId: 1
+    name: crypto-prism-alerts
+    receivers:
+      - uid: crypto-prism-webhook
+        type: webhook
+        settings:
+          url: https://example.com/REPLACE-WITH-YOUR-WEBHOOK-URL
+          httpMethod: POST
+        disableResolveMessage: false
