@@ -19,6 +19,26 @@ logger = get_logger()
 _TIMESFM_MODEL = None
 
 
+def _pin_torch_threads():
+    """Pin torch to physical cores so GEMMs get uncontended threads.
+
+    The server now runs a single uvicorn worker, so this process owns the
+    machine's cores. Using physical (not logical) core count avoids
+    hyperthread contention in matrix multiplication.
+    """
+    import os
+
+    try:
+        import psutil
+
+        n = psutil.cpu_count(logical=False)
+    except Exception:
+        n = None
+    n = n or os.cpu_count() or 2
+    torch.set_num_threads(max(1, n))
+    logger.info(f"MODEL - torch pinned to {torch.get_num_threads()} threads")
+
+
 def _load_timesfm_model(model_path: Optional[str] = None):
     """Load the TimesFM model from local safetensors checkpoint (singleton)."""
     global _TIMESFM_MODEL
@@ -30,6 +50,7 @@ def _load_timesfm_model(model_path: Optional[str] = None):
     config = Config()
     path = model_path or config.timesfm_model_path
 
+    _pin_torch_threads()
     logger.info(f"MODEL - Loading TimesFM 2.5 200M from {path}")
     model = timesfm.TimesFM_2p5_200M_torch.from_pretrained(
         path, local_files_only=True
