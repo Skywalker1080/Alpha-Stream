@@ -3,6 +3,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 from src.agents.tools import TOOL_LIST, get_crypto_news
 
 from logger.logger import get_logger
+from Backend.state import LLM_NODE_LATENCY, LLM_CALLS, LLM_RETRIES
 
 logger = get_logger()
 
@@ -23,7 +24,7 @@ except Exception as e:
             return AIMessage(content=f"LLM not available, Error: {self.error_msg}")
     llm = MockLLM(_llm_error)
 
-def _invoke_with_retry(messages, max_retries: int = 4, delay: float = 2.0):
+def _invoke_with_retry(messages, node: str = "unknown", max_retries: int = 4, delay: float = 2.0):
     """
     Retry LLM invokes. Cloud-backed Ollama models sometimes emit a
     done_reason='load' frame (model loaded, no content) as the only response,
@@ -33,22 +34,29 @@ def _invoke_with_retry(messages, max_retries: int = 4, delay: float = 2.0):
     import time
     resp = None
     last_error = None
+    t_start = time.perf_counter()
     for attempt in range(max_retries):
         try:
             resp = llm.invoke(messages)
             content = resp.content if hasattr(resp, "content") else str(resp)
             if content and str(content).strip():
+                LLM_NODE_LATENCY.labels(node=node).observe(time.perf_counter() - t_start)
+                LLM_CALLS.labels(node=node, outcome="success").inc()
                 return resp
+            LLM_CALLS.labels(node=node, outcome="empty").inc()
             logger.warning(
                 f"LLM returned empty response on attempt {attempt + 1}/{max_retries}; retrying..."
             )
         except Exception as e:
             last_error = e
+            LLM_CALLS.labels(node=node, outcome="error").inc()
             logger.warning(
                 f"LLM invoke failed on attempt {attempt + 1}/{max_retries}: {e}; retrying..."
             )
         if attempt < max_retries - 1:
+            LLM_RETRIES.labels(node=node).inc()
             time.sleep(delay)
+    LLM_NODE_LATENCY.labels(node=node).observe(time.perf_counter() - t_start)
     if resp is not None:
         return resp
     if last_error is not None:
@@ -75,7 +83,7 @@ def performance_analyst_node(state: dict) -> dict:
         Give a concise 2-3 line summary of the projected trend (Bullish/Bearish/Side-ways) and the price range.
     """
 
-    resp = _invoke_with_retry([HumanMessage(content=prompt)])
+    resp = _invoke_with_retry([HumanMessage(content=prompt)], node="performance")
     content = resp.content if hasattr(resp, "content") else str(resp)
     logger.info(f"Performance Analyst Node: {ticker} - {content[:100]}")
     return {
@@ -103,7 +111,7 @@ def market_expert_node(state: dict) -> dict:
     Return a 3-5 line summary by doing sentiment analysis.
     """
 
-    resp = _invoke_with_retry([HumanMessage(content=prompt)])
+    resp = _invoke_with_retry([HumanMessage(content=prompt)], node="market_expert")
     content = resp.content if hasattr(resp, "content") else str(resp)
     logger.info(f"Market Expert Node: {ticker} - {content[:100]}")
     return {
@@ -134,7 +142,7 @@ def report_generator(state: dict) -> dict:
     End with: **Market Stance:** BULLISH/BEARISH/NEUTRAL | **Confidence:** High/Medium/Low
     """
 
-    response = _invoke_with_retry([HumanMessage(content=prompt)])
+    response = _invoke_with_retry([HumanMessage(content=prompt)], node="report_generator")
     text = response.content if hasattr(response, "content") else str(response)
     logger.info(f"Report Generator Node: {ticker} - {text[:100]}")
     
@@ -193,7 +201,7 @@ def critic_node(state: dict) -> dict:
     Output ONLY the Final Report (whether original or improved).
     """
 
-    response = _invoke_with_retry([HumanMessage(content=prompt)])
+    response = _invoke_with_retry([HumanMessage(content=prompt)], node="critic")
     final_text = response.content if hasattr(response, "content") else str(response)
     logger.info(f"DEBUG: Critic Output: {final_text[:100]}...")
 

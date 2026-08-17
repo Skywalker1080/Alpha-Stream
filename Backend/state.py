@@ -26,3 +26,24 @@ CACHE_MISS = Counter("redis_cache_miss_total", "Cache misses", ["key"], registry
 # Drift Metrics
 DRIFT_SCORE = Gauge("model_drift_score", "Drift score for ticker", ["ticker"], registry=registry)
 VOLATILITY_INDEX = Gauge("model_volatility_index", "Volatility index for ticker", ["ticker"], registry=registry)
+
+# Agent path (LangGraph /analyze) + LLM
+_LATENCY_BUCKETS = [0.5, 1, 2.5, 5, 7.5, 10, 15, 20, 30, 45, 60, 90, 120]
+AGENT_ANALYSIS_LATENCY = Histogram(
+    "agent_analysis_latency_seconds",
+    "End-to-end /analyze latency", ["ticker"],
+    buckets=_LATENCY_BUCKETS, registry=registry,
+)
+AGENT_ANALYSIS_TOTAL = Counter("agent_analysis_total", "Total /analyze requests", ["ticker"], registry=registry)
+AGENT_ANALYSIS_ERRORS = Counter("agent_analysis_errors_total", "/analyze errors", ["ticker"], registry=registry)
+
+LLM_NODE_LATENCY = Histogram(
+    "llm_node_latency_seconds",
+    "Per-node LLM invoke latency (incl. retries)", ["node"],
+    buckets=_LATENCY_BUCKETS, registry=registry,
+)
+LLM_CALLS = Counter("llm_calls_total", "LLM invokes by outcome", ["node", "outcome"], registry=registry)
+LLM_RETRIES = Counter("llm_retries_total", "LLM invoke retry attempts", ["node"], registry=registry)
+
+SEMANTIC_CACHE_HIT = Counter("semantic_cache_hit_total", "Qdrant semantic cache hits", [], registry=registry)
+SEMANTIC_CACHE_MISS = Counter("semantic_cache_miss_total", "Qdrant semantic cache misses", [], registry=registry)

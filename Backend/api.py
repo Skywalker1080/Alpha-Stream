@@ -1,5 +1,6 @@
 from Backend.state import PREDICTION_LATENCY
 from Backend.state import PREDICTION_COUNTER
+from Backend.state import AGENT_ANALYSIS_LATENCY, AGENT_ANALYSIS_TOTAL, AGENT_ANALYSIS_ERRORS
 from fastapi import APIRouter, HTTPException, Request, Response
 import datetime
 import json
@@ -64,9 +65,16 @@ def analyze(req: AnalyzeRequest):
     if not req.ticker:
         raise HTTPException(400, "ticker required")
 
+    ticker = req.ticker.upper()
+    AGENT_ANALYSIS_TOTAL.labels(ticker=ticker).inc()
+    start_time = time.time()
     try:
-        return analyze_stock(req.ticker, thread_id= req.thread_id)
+        result = analyze_stock(req.ticker, thread_id= req.thread_id)
+        AGENT_ANALYSIS_LATENCY.labels(ticker=ticker).observe(time.time() - start_time)
+        return result
     except Exception as e:
+        AGENT_ANALYSIS_ERRORS.labels(ticker=ticker).inc()
+        AGENT_ANALYSIS_LATENCY.labels(ticker=ticker).observe(time.time() - start_time)
         raise HTTPException(500, f"Analysis failed: {str(e)}")
     
 

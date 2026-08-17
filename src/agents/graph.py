@@ -12,6 +12,7 @@ from src.agents.nodes import (
 
 from src.agents.memory import SemanticCache
 from logger.logger import get_logger
+from Backend.state import SEMANTIC_CACHE_HIT, SEMANTIC_CACHE_MISS
 
 logger = get_logger()
 
@@ -94,6 +95,7 @@ def analyze_stock(ticker: str, thread_id: str = None):
                 # Check if it's for the same ticker to be safe (semantic search might be fuzzy)
                 if cached_payload.get("ticker") == ticker_upper:
                     logger.info(f"CACHE HIT (qdrant semantic): {ticker_upper}")
+                    SEMANTIC_CACHE_HIT.inc()
                     return {
                         "final_report": cached_payload.get("summary"),
                         "recommendation": cached_payload.get("recommendation", "Neutral"),
@@ -101,6 +103,8 @@ def analyze_stock(ticker: str, thread_id: str = None):
                         "last_price": cached_payload.get("last_price", 0.0),
                         "predictions": cached_payload.get("predictions", {})
                     }
+            SEMANTIC_CACHE_MISS.inc()
+            logger.info(f"CACHE MISS (qdrant semantic): {ticker_upper}")
         except Exception as e:
             logger.warning(f"CACHE ERROR (semantic cache unavailable): {e}")
             # If error occurred, query_vec might be None or partial, but we proceed to fetch fresh data
