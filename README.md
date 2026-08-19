@@ -11,6 +11,7 @@ The project was built and iterated on over ~7 months, migrating from a trained L
 ## Table of Contents
 
 - [Key Capabilities](#key-capabilities)
+- [Screenshots](#screenshots)
 - [Architecture](#architecture)
 - [The Modeling Approach](#the-modeling-approach)
 - [Project Evolution](#project-evolution)
@@ -40,6 +41,14 @@ The project was built and iterated on over ~7 months, migrating from a trained L
 - **Data drift monitoring** — a custom drift check (mean-shift + volatility ratio) writes JSON/HTML reports per ticker and updates Prometheus gauges.
 - **Rate limiting** — Redis-backed sliding window (3 req / 60s per endpoint) protects the LLM and training backends.
 - **Kubernetes-ready** — manifests for every service (`k8s/`), validated against minikube.
+
+---
+
+## Screenshots
+
+![Crypto Prism Ops — frontend dashboard](docs/image%201.png)
+
+![Crypto Prism Ops — analysis view](docs/image%202.png)
 
 ---
 
