@@ -16,6 +16,8 @@ services:
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - MLFLOW_TRACKING_URI=file:///app/mlruns
+      - OTEL_SERVICE_NAME=fastapi
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo:4318
     depends_on:
       redis:
         condition: service_healthy
@@ -122,6 +124,23 @@ services:
     depends_on:
       prometheus:
         condition: service_started
+      tempo:
+        condition: service_started
+    networks:
+      - app_networks
+
+  tempo:
+    image: grafana/tempo:2.7.1
+    container_name: tempo
+    command: ["-config.file=/etc/tempo.yaml"]
+    restart: unless-stopped
+    volumes:
+      - ./tempo.yaml:/etc/tempo.yaml
+      - tempo_data:/var/tempo
+    ports:
+      - "3200:3200"
+      - "4317:4317"
+      - "4318:4318"
     networks:
       - app_networks
 
@@ -130,3 +149,4 @@ volumes:
   qdrant_data:
   prometheus_data:
   grafana_data:
+  tempo_data:

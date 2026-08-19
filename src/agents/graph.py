@@ -13,6 +13,7 @@ from src.agents.nodes import (
 from src.agents.memory import SemanticCache
 from logger.logger import get_logger
 from Backend.state import SEMANTIC_CACHE_HIT, SEMANTIC_CACHE_MISS
+from Backend.telemetry import trace_step
 
 logger = get_logger()
 
@@ -72,11 +73,12 @@ def analyze_stock(ticker: str, thread_id: str = None):
             
             # Create query embedding
             query_text = f"Analysis report for {ticker_upper}"
-            query_vec = embedder.embed_query(query_text)
-            logger.info(f"CACHE CHECK: embedding query for {ticker_upper} (vec len={len(query_vec)})")
-            
-            # Search (fetch more to sort by time)
-            hits = mem.recall(query_vec, ticker=ticker_upper, limit=5)
+            with trace_step("semantic_embed_and_search", ticker=ticker_upper):
+                query_vec = embedder.embed_query(query_text)
+                logger.info(f"CACHE CHECK: embedding query for {ticker_upper} (vec len={len(query_vec)})")
+
+                # Search (fetch more to sort by time)
+                hits = mem.recall(query_vec, ticker=ticker_upper, limit=5)
             logger.info(f"CACHE CHECK: recall returned {len(hits)} hits for {ticker_upper}")
             for h in hits:
                 logger.info(f"CACHE CHECK: hit score={h.score:.4f} ticker={h.payload.get('ticker')} created={h.payload.get('created_at_ts')}")
@@ -117,7 +119,8 @@ def analyze_stock(ticker: str, thread_id: str = None):
     from src.agents.tools import fetch_prediction_data
     
     # Use the new fetcher
-    raw_data = fetch_prediction_data(ticker)
+    with trace_step("fetch_predictions", ticker=ticker):
+        raw_data = fetch_prediction_data(ticker)
 
     # ---- FIX: MODEL TRAINING CASE ----
     if isinstance(raw_data, dict) and raw_data.get("status") == "training":
@@ -167,7 +170,8 @@ def analyze_stock(ticker: str, thread_id: str = None):
     config = {"configurable": {"thread_id": thread_id or "1"}}
     
     # Invoke the graph
-    result = graph.invoke(state, config=config)
+    with trace_step("langgraph_invoke", ticker=ticker_upper):
+        result = graph.invoke(state, config=config)
     
     # Inject RAW data for frontend (so it has history)
     if isinstance(raw_data, dict):
@@ -197,15 +201,16 @@ def analyze_stock(ticker: str, thread_id: str = None):
                         last_price = float(fc[0].get("close", 0))
 
             if query_vec:
-                mem.save_episode(
-                    ticker=ticker_upper,
-                    summary=result["final_report"],
-                    embeddings=query_vec, # Reuse the query vector as the key
-                    recommendation=rec,
-                    confidence=conf,
-                    last_price=last_price,
-                    predictions=preds_data if isinstance(preds_data, dict) else {}
-                )
+                with trace_step("semantic_cache_save", ticker=ticker_upper):
+                    mem.save_episode(
+                        ticker=ticker_upper,
+                        summary=result["final_report"],
+                        embeddings=query_vec, # Reuse the query vector as the key
+                        recommendation=rec,
+                        confidence=conf,
+                        last_price=last_price,
+                        predictions=preds_data if isinstance(preds_data, dict) else {}
+                    )
                 logger.info(f"CACHE SAVE OK (qdrant): {ticker_upper}")
             else:
                 logger.warning("CACHE SAVE SKIPPED: query_vec generation failed")

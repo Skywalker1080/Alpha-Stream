@@ -1,4 +1,5 @@
 import asyncio
+import contextvars
 import json
 import time
 from datetime import datetime
@@ -109,11 +110,12 @@ async def run_training_worker(task_id: str, fn, *args, chain_fn=None):
     """Actual training worker that runs in background. (Thread Pool)"""
     loop = asyncio.get_event_loop()
     start_time = time.time()
+    ctx = contextvars.copy_context()
     try:
-        result = await loop.run_in_executor(executor, fn, *args)
+        result = await loop.run_in_executor(executor, ctx.run, fn, *args)
         if chain_fn:
             logger.info(f"Task {task_id}: Training complete, running chained task...")
-            await loop.run_in_executor(executor, chain_fn)
+            await loop.run_in_executor(executor, ctx.run, chain_fn)
             logger.info(f"Task {task_id}: Chained Task Complete")
         
         duration = time.time() - start_time
@@ -134,9 +136,10 @@ async def run_training_worker(task_id: str, fn, *args, chain_fn=None):
         logger.error(f"Training failed for {task_id}: {str(e)}")
 
 async def run_blocking_fn(fn, *args):
-    """Run a blocking function in the thread pool"""
+    """Run a blocking function in the thread pool, preserving trace context."""
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(executor, fn, *args)
+    ctx = contextvars.copy_context()
+    return await loop.run_in_executor(executor, ctx.run, fn, *args)
 
 async def run_training(task_id: str, fn, *args, chain_fn=None):
     """Start training in background and return immediately."""

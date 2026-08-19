@@ -4,6 +4,7 @@ from src.agents.tools import TOOL_LIST, get_crypto_news
 
 from logger.logger import get_logger
 from Backend.state import LLM_NODE_LATENCY, LLM_CALLS, LLM_RETRIES
+from Backend.telemetry import traced_node
 
 logger = get_logger()
 
@@ -63,6 +64,7 @@ def _invoke_with_retry(messages, node: str = "unknown", max_retries: int = 4, de
         raise last_error
     return AIMessage(content="")
 
+@traced_node("performance")
 def performance_analyst_node(state: dict) -> dict:
     ticker = state['ticker']
     predictions = state.get("predictions")
@@ -92,6 +94,7 @@ def performance_analyst_node(state: dict) -> dict:
     }
 
 # Market Expert Node
+@traced_node("market_expert")
 def market_expert_node(state: dict) -> dict:
     ticker = state['ticker']
     logger.info(f"Running Market Expert Node: {ticker}")
@@ -121,6 +124,7 @@ def market_expert_node(state: dict) -> dict:
 
 # Report Generation
 
+@traced_node("report_generator")
 def report_generator(state: dict) -> dict:
     ticker = state["ticker"]
     logger.info(f"Running Report Generator Node: {ticker}")
@@ -170,6 +174,7 @@ def report_generator(state: dict) -> dict:
         "confidence": confidence
     }
 
+@traced_node("critic")
 def critic_node(state: dict) -> dict:
     """
     Critics and refines the report.

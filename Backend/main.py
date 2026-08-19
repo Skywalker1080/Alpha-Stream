@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
 
+from Backend.telemetry import init_telemetry, current_trace_id, _OTEL_AVAILABLE
 from src.utils import initialize_dirs
 import Backend.state as app_state
 from Backend.state import (
@@ -25,8 +26,44 @@ from Backend.api import router
 
 logger = get_logger()
 
+init_telemetry()
+
+if _OTEL_AVAILABLE:
+    try:
+        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+        from opentelemetry.instrumentation.requests import RequestsInstrumentor
+        from opentelemetry.instrumentation.redis import RedisInstrumentor
+        from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+
+        RequestsInstrumentor().instrument()
+        RedisInstrumentor().instrument()
+        HTTPXClientInstrumentor().instrument()
+        logger.info("OpenTelemetry client instrumentors enabled (requests/redis/httpx)")
+    except Exception as e:
+        logger.warning(f"OpenTelemetry client instrumentation failed: {e}")
+
 app = FastAPI(title="Alpha Stream API", description="Backend for Alpha Stream", version="0.1.0")
 app.include_router(router)
+
+
+@app.middleware("http")
+async def add_trace_id_header(request, call_next):
+    """Echo the active trace id back on the response for easy correlation."""
+    response = await call_next(request)
+    trace_id = current_trace_id()
+    if trace_id:
+        response.headers["X-Trace-Id"] = trace_id
+    return response
+
+
+if _OTEL_AVAILABLE:
+    try:
+        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+        FastAPIInstrumentor.instrument_app(app)
+        logger.info("OpenTelemetry FastAPI instrumentation enabled")
+    except Exception as e:
+        logger.warning(f"OpenTelemetry FastAPI instrumentation failed: {e}")
 
 app.add_middleware(
     CORSMiddleware,

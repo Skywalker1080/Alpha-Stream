@@ -3,6 +3,7 @@ from src.config.pipeline_config import Config
 from src.data.data_ingestion import fetch_ohlcv
 from src.inference_util import (predict_one_step, get_feature_Store, safe_load_local_model)
 from logger.logger import get_logger
+from Backend.telemetry import trace_step
 import sys
 
 logger = get_logger()
@@ -16,46 +17,51 @@ def predict_parent():
         ticker = config.parent_ticker
         
         logger.info(f"INFERENCE: Loading TimesFM model for {ticker}")
-        model, scaler = safe_load_local_model(ticker, "parent")
+        with trace_step("model_load", ticker=ticker, model_type="parent"):
+            model, scaler = safe_load_local_model(ticker, "parent")
         
         logger.info(f"INFERENCE: Fetching OHLCV data for {ticker}")
-        df = fetch_ohlcv(ticker)
+        with trace_step("fetch_ohlcv", ticker=ticker):
+            df = fetch_ohlcv(ticker)
 
         # get feature store
         logger.info("INFERENCE: Accessing feature store")
-        store = get_feature_Store()
-        if store:
-            try:
-                feature_store = store.get_online_features(
-                    features=[
-                        "crypto_features:Open",
-                        "crypto_features:High",
-                        "crypto_features:Low",
-                        "crypto_features:Close",
-                        "crypto_features:Volume",
-                        "crypto_features:RSI",
-                        "crypto_features:MACD",
-                    ],
-                    entity_rows=[{"ticker": ticker}]
-                ).to_dict()
-                logger.debug("INFERENCE: Successfully retrieved online features")
-            except Exception as e:
-                logger.warning(f"INFERENCE: Failed to fetch online features: {str(e)}")
+        with trace_step("feature_store_lookup", ticker=ticker):
+            store = get_feature_Store()
+            if store:
+                try:
+                    feature_store = store.get_online_features(
+                        features=[
+                            "crypto_features:Open",
+                            "crypto_features:High",
+                            "crypto_features:Low",
+                            "crypto_features:Close",
+                            "crypto_features:Volume",
+                            "crypto_features:RSI",
+                            "crypto_features:MACD",
+                        ],
+                        entity_rows=[{"ticker": ticker}]
+                    ).to_dict()
+                    logger.debug("INFERENCE: Successfully retrieved online features")
+                except Exception as e:
+                    logger.warning(f"INFERENCE: Failed to fetch online features: {str(e)}")
         
         logger.info(f"INFERENCE: Generating predictions for {ticker}")
-        preds = predict_one_step(model, df, scaler, ticker)
+        with trace_step("predict_one_step", ticker=ticker):
+            preds = predict_one_step(model, df, scaler, ticker)
 
         logger.info("INFERENCE: Preparing history data for response")
-        history_df = df.tail(30).copy()
-        history_df.columns = [c.lower() for c in history_df.columns]
+        with trace_step("history_prep", ticker=ticker):
+            history_df = df.tail(30).copy()
+            history_df.columns = [c.lower() for c in history_df.columns]
 
-        if "date" in history_df.columns:
-            preds["history"] = history_df[["date", "close"]].to_dict(orient="records")
-        else:
-            hist_recs = []
-            for idx, row in history_df.iterrows():
-                hist_recs.append({"date": str(idx.date()), "close": row["close"]})
-            preds["history"] = hist_recs
+            if "date" in history_df.columns:
+                preds["history"] = history_df[["date", "close"]].to_dict(orient="records")
+            else:
+                hist_recs = []
+                for idx, row in history_df.iterrows():
+                    hist_recs.append({"date": str(idx.date()), "close": row["close"]})
+                preds["history"] = hist_recs
 
         logger.info(f"INFERENCE: Parent prediction for {ticker} completed successfully")
         return preds
@@ -69,46 +75,51 @@ def predict_child(ticker: str):
         logger.info(f"INFERENCE: Starting child inference pipeline for {ticker}")
         
         logger.info(f"INFERENCE: Loading TimesFM model for {ticker}")
-        model, scaler = safe_load_local_model(ticker=ticker, model_type="child")
+        with trace_step("model_load", ticker=ticker, model_type="child"):
+            model, scaler = safe_load_local_model(ticker=ticker, model_type="child")
         
         logger.info(f"INFERENCE: Fetching OHLCV data for {ticker}")
-        df = fetch_ohlcv(ticker=ticker)
+        with trace_step("fetch_ohlcv", ticker=ticker):
+            df = fetch_ohlcv(ticker=ticker)
 
         # get feature store
         logger.info("INFERENCE: Accessing feature store")
-        store = get_feature_Store()
-        if store:
-            try:
-                feature_store = store.get_online_features(
-                    features=[
-                        "crypto_features:Open",
-                        "crypto_features:High",
-                        "crypto_features:Low",
-                        "crypto_features:Close",
-                        "crypto_features:Volume",
-                        "crypto_features:RSI",
-                        "crypto_features:MACD",
-                    ],
-                    entity_rows=[{"ticker": ticker}]
-                ).to_dict()
-                logger.debug("INFERENCE: Successfully retrieved online features")
-            except Exception as e:
-                logger.warning(f"INFERENCE: Failed to fetch online features: {str(e)}")
+        with trace_step("feature_store_lookup", ticker=ticker):
+            store = get_feature_Store()
+            if store:
+                try:
+                    feature_store = store.get_online_features(
+                        features=[
+                            "crypto_features:Open",
+                            "crypto_features:High",
+                            "crypto_features:Low",
+                            "crypto_features:Close",
+                            "crypto_features:Volume",
+                            "crypto_features:RSI",
+                            "crypto_features:MACD",
+                        ],
+                        entity_rows=[{"ticker": ticker}]
+                    ).to_dict()
+                    logger.debug("INFERENCE: Successfully retrieved online features")
+                except Exception as e:
+                    logger.warning(f"INFERENCE: Failed to fetch online features: {str(e)}")
 
         logger.info(f"INFERENCE: Generating predictions for {ticker}")
-        preds = predict_one_step(model=model, df=df, scaler=scaler, ticker=ticker)
+        with trace_step("predict_one_step", ticker=ticker):
+            preds = predict_one_step(model=model, df=df, scaler=scaler, ticker=ticker)
 
         logger.info("INFERENCE: Preparing history data for response")
-        history_df = df.tail(30).copy()
-        history_df.columns = [c.lower() for c in history_df.columns]
+        with trace_step("history_prep", ticker=ticker):
+            history_df = df.tail(30).copy()
+            history_df.columns = [c.lower() for c in history_df.columns]
 
-        if "date" in history_df.columns:
-            preds["history"] = history_df[["date", "close"]].to_dict(orient="records")
-        else:
-            hist_recs = []
-            for idx, row in history_df.iterrows():
-                hist_recs.append({"date": str(idx.date()), "close": row["close"]})
-            preds["history"] = hist_recs
+            if "date" in history_df.columns:
+                preds["history"] = history_df[["date", "close"]].to_dict(orient="records")
+            else:
+                hist_recs = []
+                for idx, row in history_df.iterrows():
+                    hist_recs.append({"date": str(idx.date()), "close": row["close"]})
+                preds["history"] = hist_recs
 
         logger.info(f"INFERENCE: Child prediction for {ticker} completed successfully")
         return preds

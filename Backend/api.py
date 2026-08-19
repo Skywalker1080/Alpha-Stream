@@ -23,6 +23,7 @@ from src.pipeline.inference_pipeline import predict_child, predict_parent
 from src.model.provisioning import (
     ModelProvisioner, ProvisionState, PARENT_TASK_ID, child_task_id, CHILD_TASK_PREFIX
 )
+from Backend.telemetry import trace_step
 
 BASE_PATH = "outputs"
 
@@ -69,7 +70,8 @@ def analyze(req: AnalyzeRequest):
     AGENT_ANALYSIS_TOTAL.labels(ticker=ticker).inc()
     start_time = time.time()
     try:
-        result = analyze_stock(req.ticker, thread_id= req.thread_id)
+        with trace_step("analyze", ticker=ticker, thread_id=req.thread_id or ""):
+            result = analyze_stock(req.ticker, thread_id=req.thread_id)
         AGENT_ANALYSIS_LATENCY.labels(ticker=ticker).observe(time.time() - start_time)
         return result
     except Exception as e:
@@ -125,7 +127,8 @@ async def predict_parent_endpoint():
     PREDICTION_COUNTER.labels(type="parent", ticker=Config.parent_ticker).inc()
     start_time = time.time()
     try:
-        result = await run_blocking_fn(predict_parent)
+        with trace_step("predict", type="parent", ticker=Config.parent_ticker):
+            result = await run_blocking_fn(predict_parent)
         PREDICTION_LATENCY.labels(type="parent", ticker=Config.parent_ticker).observe(time.time() - start_time)
         return {"result": result}
     except Exception as e:
@@ -157,7 +160,8 @@ async def predict_child_endpoint(request: Request, response: Response):
         def get_preds():
             return get_or_set_cache(f"predict_child_{ticker.lower()}", lambda: predict_child(ticker), expire=86400)
 
-        preds, _ = await run_blocking_fn(get_preds)
+        with trace_step("predict", type="child", ticker=ticker):
+            preds, _ = await run_blocking_fn(get_preds)
         PREDICTION_LATENCY.labels(type="child", ticker=ticker).observe(time.time() - start_time)
         return {"result": preds}
     except Exception as e:
